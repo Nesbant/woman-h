@@ -235,11 +235,15 @@ def history_snapshot(spec, institution_id, files):
     }
 
 
-def history_case(spec, institution_id, submitter, store):
+def history_case(spec, institution_id, submitter, store, assignee_id=None):
+    """`assignee_id`: who a case is pre-assigned to. Defaults to each case's own demo reviewer (`spec.assignee`,
+    a `DEMO_USERS` email) via `demo_id` — the existing demo behavior, unchanged. `seed_production.py` passes an
+    explicit override instead, since the fictional per-case demo reviewers (`andrea@example.test`,
+    `carlos@example.test`) are never created outside demo mode."""
     from uuid import uuid4
     from .procedure import STEPS
     at = datetime.fromisoformat(spec.received)
-    assignee = demo_id(spec.assignee)
+    assignee = assignee_id or demo_id(spec.assignee)
     case = InstitutionalCase(id=str(uuid4()), case_id=spec.case_id, institution_id=institution_id, submitted_by=submitter,
                              submitted_at=at, status=spec.status, assignee_id=assignee, created_at=at, snapshot_json={},
                              procedure_json={key: {"status": state, "updated_at": spec.received, "updated_by": assignee}
@@ -249,13 +253,14 @@ def history_case(spec, institution_id, submitter, store):
     return case
 
 
-def seed_history(db, store, institution_id):
-    """Earlier synthetic cases, so Institutional shows a realistic queue. Only created when absent."""
+def seed_history(db, store, institution_id, assignee_id=None):
+    """Earlier synthetic cases, so Institutional shows a realistic queue. Only created when absent.
+    `assignee_id`: see `history_case`."""
     submitter = ensure_history_user(db)
     existing = set(db.scalars(select(InstitutionalCase.case_id).where(InstitutionalCase.institution_id == institution_id)))
     for spec in HISTORY:
         if spec.case_id not in existing:
-            db.add(history_case(spec, institution_id, submitter, store))
+            db.add(history_case(spec, institution_id, submitter, store, assignee_id))
     db.commit()
 
 

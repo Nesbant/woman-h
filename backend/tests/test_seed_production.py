@@ -52,6 +52,20 @@ def test_partial_vars_seed_only_the_configured_accounts(store, monkeypatch):
     assert user_by_email(REVIEWER_EMAIL) is None
 
 
+def test_marias_history_seeds_without_a_configured_reviewer(store, monkeypatch):
+    """seed.HISTORY's own per-case assignees (andrea@example.test/carlos@example.test) only exist under
+    DEMO_ENABLED=true; without SEED_REVIEWER_* this must not violate InstitutionalCase.assignee_id's foreign
+    key — caught by an actual Docker/PostgreSQL run before this test existed (see odd/tasks/railway-deploy.md,
+    T8), so it is exercised here too against the fast SQLite suite."""
+    run_with(monkeypatch, production_settings(seed_maria_email=MARIA_EMAIL, seed_maria_password=MARIA_PASSWORD))
+    maria = user_by_email(MARIA_EMAIL)
+    with SessionLocal() as db:
+        profile = db.get(Profile, maria.id)
+        cases = db.scalars(select(InstitutionalCase).where(InstitutionalCase.institution_id == profile.institution_id)).all()
+        assert sorted(c.case_id for c in cases) == ["V-001", "V-002", "V-003"]
+        assert all(db.get(User, c.assignee_id) is not None for c in cases)
+
+
 def test_works_under_production_settings_without_demo_mode(store, monkeypatch):
     """Never calls app.seed.require_demo/seed_demo_case; must not require DEMO_ENABLED at all."""
     config = all_accounts_settings().model_copy(update={

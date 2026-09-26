@@ -24,7 +24,8 @@ from .config import settings
 from .db import SessionLocal
 from .models import Institution, Membership, User
 from .security import passwords
-from .seed import ANDINA, attach_missing_files, ensure_conversation, ensure_profile, ensure_record, seed_history
+from .seed import (ANDINA, attach_missing_files, ensure_conversation, ensure_history_user, ensure_profile,
+                   ensure_record, seed_history)
 
 MIN_PASSWORD_LENGTH = 16
 
@@ -90,10 +91,16 @@ def seed_reviewer(db, config):
     return user
 
 
-def seed_maria(db, store, config):
+def seed_maria(db, store, config, reviewer=None):
     """María's account with her case fully prepared: relato, three evidence files, an Empresa Andina profile,
     three historical cases and an opening conversation — every step here is independently idempotent (safe to
-    complete a partially-seeded case on a later run), exactly like `app.seed.seed_demo_case` already is."""
+    complete a partially-seeded case on a later run), exactly like `app.seed.seed_demo_case` already is.
+
+    `reviewer`: the real account (if any) the seeded historical cases get pre-assigned to. `seed.HISTORY`'s
+    own per-case assignees are `app.seed.DEMO_USERS` emails (`andrea@example.test`, `carlos@example.test`)
+    that only exist under `DEMO_ENABLED=true`; assigning to them here would violate the `assignee_id` foreign
+    key. Falls back to the same inactive, non-loginable placeholder `ensure_history_user` already uses for
+    the historical submitter when no reviewer was configured, so history still seeds without crashing."""
     if not config.seed_maria_email or not config.seed_maria_password:
         return None
     validated_password(config.seed_maria_password, "SEED_MARIA_PASSWORD")
@@ -102,7 +109,8 @@ def seed_maria(db, store, config):
     record_id = stable_id(f"maria-situacion:{user.id}")
     ensure_profile(db, user.id, institution.id)
     ensure_record(db, record_id, user.id)
-    seed_history(db, store, institution.id)
+    assignee_id = reviewer.id if reviewer is not None else ensure_history_user(db)
+    seed_history(db, store, institution.id, assignee_id=assignee_id)
     attach_missing_files(db, store, record_id)
     ensure_conversation(db, record_id)
     return user
@@ -115,8 +123,8 @@ def run():
     store = get_storage()
     with SessionLocal() as db:
         seed_real_user(db, config)
-        seed_reviewer(db, config)
-        seed_maria(db, store, config)
+        reviewer = seed_reviewer(db, config)
+        seed_maria(db, store, config, reviewer=reviewer)
         db.commit()
     print("Semilla de producción aplicada (las cuentas ya existentes no se modificaron).")
 

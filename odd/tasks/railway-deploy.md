@@ -46,7 +46,7 @@ Runners: `cd backend && ../.venv/bin/python -m pytest -q`; `cd frontend && npm t
       Empresa Andina reviewer (Lucía) and a plain real-use account, all from `SEED_*` env vars, without
       `DEMO_ENABLED`. `SEED_ON_START` (`main.py` lifespan) as the Railway-volume workaround for T7.
 - [x] T7 Railway `preDeployCommand`/`SEED_ON_START` decision, README variables + setup steps, `.env.example`.
-- [ ] T8 Docker check against a disposable `vera_deploycheck` database in `woman-h-db-1`.
+- [x] T8 Docker check against a disposable `vera_deploycheck` database in `woman-h-db-1`.
 
 ## Acceptance criteria
 - Local dev unchanged; backend and frontend test suites pass.
@@ -220,6 +220,64 @@ Runners: `cd backend && ../.venv/bin/python -m pytest -q`; `cd frontend && npm t
   `.env.example`: `SEED_*` vars + `SEED_ON_START` added (T5's `TIMELINE_MODEL`/`OpenRouterTimelineAdapter`
   option was already added when T5 landed).
 
+  T8 done, and it caught a real bug: `docker build -t vera-deploycheck .` succeeded (no `frontend/dist`
+  present on disk this time, so no `COPY contracts/` repeat was needed). Created a disposable
+  `vera_deploycheck` database in `woman-h-db-1` (`docker exec woman-h-db-1 createdb -U vera
+  vera_deploycheck`). Ran the exact `preDeployCommand` (`cd /app/backend && python -m alembic upgrade head`)
+  in a throwaway container with `APP_ENV=production`, `COOKIE_SECURE=true`, `DEMO_ENABLED=false`,
+  `ALLOWED_ORIGINS=["https://example.test"]`, `CHAT_BRAIN=openrouter` (no `OPENROUTER_API_KEY`),
+  `--network host` (reaches `localhost:5432`) and a tmp-dir volume at `/data` — 18 tables created, exit 0.
+
+  **First run failed** starting the real server with `SEED_ON_START=true` +
+  `SEED_MARIA_EMAIL`/`SEED_REVIEWER_EMAIL`/`SEED_USER_EMAIL` set: `IntegrityError:
+  ForeignKeyViolation … institutional_cases_assignee_id_fkey`. Root cause: `seed.py::HISTORY`'s three
+  historical cases hardcode their assignee as `demo_id("andrea@example.test")`/`demo_id("carlos@example.test")`
+  — real `User` rows that only exist after `app.seed.seed()` (the *demo user* seed) has run, which
+  `seed_production.py` deliberately never calls. SQLite never caught this because this project does not
+  enable `PRAGMA foreign_keys` for it (checked `app/db.py`: no such pragma), so `test_seed_production.py`'s
+  SQLite-only tests passed while silently leaving a production-breaking bug — exactly the kind of gap this
+  Docker-against-real-PostgreSQL check exists to catch.
+
+  Fix: `seed.py::history_case`/`seed_history` gained an optional `assignee_id` override (default `None` →
+  unchanged existing behavior, `demo_id(spec.assignee)`, so demo mode is untouched). `seed_production.py::
+  seed_maria` now passes `reviewer.id` (the real `SEED_REVIEWER_*` account) when configured, or falls back to
+  the same inactive, non-loginable placeholder `ensure_history_user` already uses for the historical
+  submitter — so historical cases never reference a demo-only identity that doesn't exist in production.
+  Added `test_marias_history_seeds_without_a_configured_reviewer` (SQLite) covering the no-reviewer fallback,
+  plus re-ran `test_seed_production.py`/`test_timeline.py`/`test_timeline_ai_openrouter.py` against real
+  PostgreSQL (`vera_test`) to confirm the FK path specifically: 31 passed.
+
+  Re-built the image, recreated `vera_deploycheck`, re-ran migrations, then started the real server
+  (`docker run -d`, same production-like env, `TIMELINE_AI_FACTORY=app.timeline_ai:OpenRouterTimelineAdapter`,
+  `PORT=8099`) — logs showed "Semilla de producción aplicada" and clean startup. `curl` (run from a throwaway
+  `--network host` container, since this session's own shell sits in a separate network namespace that
+  cannot reach a `--network host` container's bound port directly — confirmed by first getting a false
+  "connection refused" from this shell, then getting `200` for the identical request from inside another
+  `--network host` container) against `/api/health` → `{"status":"ok","demo":false}`; `/` → `200` (SPA
+  `index.html`). Logged in as `maria-deploycheck@example.test` via `POST /api/auth/login` with `Origin:
+  https://example.test` and `X-VERA-Request: 1` (a small Python `http.client` script, since the slim runtime
+  image has neither `curl` nor `wget`): `GET /api/records` → exactly 1 record ("Situación #001"); `GET
+  /api/records/{id}/files` → exactly 3 files (`captura_01.png`, `correo_01.pdf`, `captura_02.png`). DB spot
+  check: only 4 `users` rows total (María, Lucía, the real-use account, the inactive `historial@example.test`
+  placeholder — no `ana@example.test`/`andrea@example.test`/etc.), and all three `institutional_cases` rows
+  (`V-001`/`V-002`/`V-003`) correctly `assignee_id`-linked to Lucía's real account id.
+
+  Cleanup: stopped/removed `vera-deploycheck-server`, `docker exec woman-h-db-1 dropdb -U vera
+  vera_deploycheck` (confirmed gone from `psql -U vera -lqt`), cleared the tmp volume directory (needed an
+  `alpine` container to `rm -rf` it as root — the app's own container runs as root per T2's documented
+  Railway-volume tradeoff, so files it wrote were root-owned on the host), removed the `vera-deploycheck`
+  image (`docker rmi`). Worktree left clean (`git status` clean besides the intended source edits; no stray
+  `frontend/dist`).
+
+  Final verification this session: SQLite 234 passed / 1 skipped (baseline 233/1, +1 from the no-reviewer
+  fallback test); PostgreSQL (`vera_test`) 235 passed (baseline 234, +1). `frontend/tsc -b`/`vitest` not run —
+  no frontend changes this session, and `frontend/node_modules` does not exist in this worktree (only in the
+  main checkout), matching the earlier writer's own note in T2/T3's verification. Real-provider smoke against
+  OpenRouter (`OpenRouterBrain`/`OpenRouterTimelineAdapter`) is not possible: no `OPENROUTER_API_KEY` in this
+  environment.
+
 ## Next step
-User: commit the branch, create the Railway project (Postgres + volume at `/data`), set variables per README.
-Open decision: demo mode is rejected under `APP_ENV=production`.
+All four tasks (T5–T8) done. User: set the six `SEED_*` variables (and `SEED_ON_START=true`) plus
+`CHAT_BRAIN=openrouter`/`TIMELINE_AI_FACTORY=app.timeline_ai:OpenRouterTimelineAdapter`/`OPENROUTER_API_KEY`
+on the Railway web service, then redeploy — see README "Despliegue (Railway)" for the full variable list and
+setup steps. Open decision (unchanged): demo mode is rejected under `APP_ENV=production`.
