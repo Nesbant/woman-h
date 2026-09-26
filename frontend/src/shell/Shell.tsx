@@ -7,6 +7,7 @@ import { RecordContext } from '../recordContext'
 import { Sidebar } from './Sidebar'
 import { Stepper } from './Stepper'
 import { Topbar } from './Topbar'
+import { useMobileNav } from './useMobileNav'
 import { ViewRouter } from './ViewRouter'
 import type { ShellData } from './useShellData'
 
@@ -32,6 +33,7 @@ export function Shell({ route, user, demo, onDemo, onLogout, data }: Props) {
   const { done } = progress(data.overview)
   const page = activePage(route)
   const [title, subtitle] = crumbs(route, data.overview?.record.title)
+  const nav = useMobileNav(route)
   const goStep = (step: Step) => {
     if (data.recordId && data.recordId !== NEW_RECORD) navigate(recordPath(data.recordId, step))
     else if (step === 'registrar') navigate(recordPath(NEW_RECORD, 'registrar'))
@@ -39,10 +41,11 @@ export function Shell({ route, user, demo, onDemo, onLogout, data }: Props) {
   const showStepper = route.name === 'record' && route.step !== 'enviado'
   return <RecordContext.Provider value={{ overview: data.overview, refresh: data.refresh }}>
     <div className="layout">
+      {nav.open && <div className="scrim" onClick={nav.close} />}
       <Sidebar user={user} demo={demo} onDemo={onDemo} onLogout={onLogout} institutional={data.institutional} caseCount={data.caseCount}
-        page={page} recordId={data.recordId} overview={data.overview} done={done} onStep={goStep} />
+        page={page} recordId={data.recordId} overview={data.overview} done={done} onStep={goStep} open={nav.open} panelRef={nav.panelRef} />
       <div className="content">
-        <Topbar title={title} subtitle={subtitle} institutional={data.institutional} user={user} />
+        <Topbar title={title} subtitle={subtitle} institutional={data.institutional} user={user} nav={nav} />
         <main className="main">
           {showStepper && <Stepper active={page as Step} done={done} onGo={goStep} />}
           <ViewRouter route={route} user={user} demo={demo} onDemo={onDemo} />

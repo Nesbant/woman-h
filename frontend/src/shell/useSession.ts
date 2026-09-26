@@ -14,7 +14,11 @@ export function useSession() {
     session.health().then(result => setDemo(result.demo)).catch(() => {})
     session.currentUser().then(setUser).catch(e => setError((e as Error).message)).finally(() => setLoading(false))
   }, [])
-  const signedIn = useCallback((value: User, path = '') => { setError(''); setUser(value); navigate(path) }, [])
+  // A new screen starts at the top even when the hash does not change (the login form may be scrolled on mobile).
+  const signedIn = useCallback((value: User, path = '') => {
+    setError(''); setUser(value); navigate(path)
+    try { window.scrollTo(0, 0) } catch { /* jsdom */ }
+  }, [])
   const expired = useCallback(() => { setUser(null); setError('Tu sesión terminó. Inicia sesión nuevamente.') }, [])
   const switchDemo = useCallback(async (view: DemoView) => {
     try { signedIn(await session.switchDemo(view), view === 'organization' ? 'institutional' : '') }
