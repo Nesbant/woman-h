@@ -8,6 +8,7 @@ from .config import settings
 from .db import get_db
 from .records import router as records_router
 from .accounts import router as accounts_router
+from .conversation import router as conversation_router
 from .files import router as files_router
 from .start import router as start_router
 from .timeline import router as timeline_router
@@ -24,6 +25,7 @@ app = FastAPI(title="VERA · API", docs_url="/api/docs" if config.app_env != "pr
 app.include_router(auth_router)
 app.include_router(records_router)
 app.include_router(accounts_router)
+app.include_router(conversation_router)
 app.include_router(files_router)
 app.include_router(start_router)
 app.include_router(timeline_router)
