@@ -82,6 +82,8 @@ test('conversación a 390 px conserva foco, texto y ancho al usar panel, adjunto
   await page.getByRole('button', { name: 'Ver lo registrado' }).focus()
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(/#\/s\/r1\/entender$/)
+  // On mobile the navigation lives in the menu drawer.
+  await page.getByRole('button', { name: 'Abrir menú' }).click()
   await page.getByRole('button', { name: 'Conversación' }).focus()
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(/#\/s\/r1\/conversar$/)
