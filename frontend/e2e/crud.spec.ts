@@ -6,7 +6,7 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 test('situación nueva: evidencia, hecho propio, perfil, renombrar y eliminar tras enviar', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Entrar como persona' }).click()
-  await page.getByRole('button', { name: /Registrar algo nuevo/ }).click()
+  await page.getByRole('button', { name: /Registrar algo nuevo/ }).first().click()
   await page.getByLabel('Tu relato').fill('El 05/09/2026 mi jefe me gritó delante del equipo.')
   await page.getByLabel('Tu relato').blur()
   await page.waitForURL(/#\/s\/(?!nuevo)[^/]+\/registrar$/)

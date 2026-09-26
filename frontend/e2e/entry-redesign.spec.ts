@@ -114,6 +114,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 1024 
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
     await page.getByRole('button', { name: 'Registrar algo nuevo' }).first().click()
     await expect(page).toHaveURL(/#\/s\/nuevo\/registrar$/)
+    // Up to 900 px the navigation lives in the menu drawer.
+    if (viewport.width <= 900) await page.getByRole('button', { name: 'Abrir menú' }).click()
     await page.getByRole('button', { name: 'Mi espacio' }).click()
     await page.getByRole('button', { name: 'Conversar con VERA' }).click()
     await expect(page).toHaveURL(/#\/conversar$/)
