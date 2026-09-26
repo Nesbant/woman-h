@@ -4,12 +4,12 @@ import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom/vitest'
 import type { ReactNode } from 'react'
-import { ToastProvider } from '../ui'
+import { ToastProvider } from '../components/Toast'
 import { mockApi } from '../testing'
-import { Understand } from './Understand'
-import { Draft } from './Draft'
-import { Share } from './Share'
-import { Institutional } from './Institutional'
+import { Understand } from './understand/Understand'
+import { Draft } from './draft/Draft'
+import { Share } from './share/Share'
+import { Institutional } from './institutional/Institutional'
 
 afterEach(() => { cleanup(); window.location.hash = ''; vi.restoreAllMocks(); vi.unstubAllGlobals() })
 beforeEach(() => { vi.spyOn(window, 'scrollTo').mockImplementation(() => {}) })

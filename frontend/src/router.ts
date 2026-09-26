@@ -5,12 +5,14 @@ export type Route =
   | { name: 'home' }
   | { name: 'record'; recordId: string; step: Step | 'enviado' }
   | { name: 'institutional' }
+  | { name: 'profile' }
 
 export function parseRoute(hash: string): Route {
   const path = hash.replace(/^#\/?/, '')
   const record = /^s\/([^/]+)\/(registrar|entender|preparar|compartir|enviado)$/.exec(path)
   if (record) return { name: 'record', recordId: record[1], step: record[2] as Step | 'enviado' }
   if (path === 'institutional') return { name: 'institutional' }
+  if (path === 'perfil') return { name: 'profile' }
   return { name: 'home' }
 }
 

@@ -2,7 +2,7 @@
 export type Membership = { institution_id: string; name: string; role: 'admin' | 'reviewer' }
 export type User = { id: string; name: string; email: string; memberships: Membership[] }
 
-export type SourceRef = { id: string; kind: 'account' | 'record' | 'file'; source_id: string; label: string; quote: string; page: number | null; field?: string | null }
+export type SourceRef = { id: string; kind: 'account' | 'record' | 'file' | 'person'; source_id: string; label: string; quote: string; page: number | null; field?: string | null }
 export type DateKind = 'exact' | 'approximate' | 'unknown'
 export type EventContent = { title?: string; description: string; date_kind: DateKind; event_date: string | null; approximate_date: string | null; event_time?: string | null }
 export type TimelineEvent = EventContent & {
