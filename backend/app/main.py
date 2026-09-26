@@ -1,7 +1,7 @@
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session as DBSession
 from .config import settings
@@ -62,3 +62,26 @@ async def validation_error(request, exc):
 def health(db: DBSession = Depends(get_db)):
     db.execute(text("SELECT 1"))
     return {"status": "ok", "demo": config.demo_enabled}
+
+
+# Railway option A: FastAPI also serves the built SPA (`frontend/dist`) so the API and the frontend share one
+# origin (required by the `SameSite=strict`/`path=/api` session cookie). Registered unconditionally (not only
+# when the dist dir exists at import time) and re-checked per request, so it stays testable and behaves exactly
+# like today's default 404 when there is no build to serve. Declared last so every real `/api/*` route above
+# still wins the match.
+@app.get("/{full_path:path}")
+def spa(full_path: str):
+    if full_path == "api" or full_path.startswith("api/"):
+        raise HTTPException(404, "Not Found")
+    dist = settings().frontend_dist
+    if not dist.is_dir():
+        raise HTTPException(404, "Not Found")
+    dist = dist.resolve()
+    if full_path:
+        candidate = (dist / full_path).resolve()
+        if candidate.is_relative_to(dist) and candidate.is_file():
+            return FileResponse(candidate)
+    index = dist / "index.html"
+    if not index.is_file():
+        raise HTTPException(404, "Not Found")
+    return FileResponse(index)

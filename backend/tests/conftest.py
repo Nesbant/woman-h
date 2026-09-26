@@ -53,6 +53,15 @@ def data(schema):
     seed()
 
 
+@pytest.fixture(autouse=True)
+def no_frontend_dist(monkeypatch, tmp_path):
+    """Backend tests must not depend on whether `frontend/dist` happens to exist on disk (e.g. after a local
+    `npm run build`): default every test to a path that does not exist, matching CI (separate frontend/backend
+    checkouts). Tests for the SPA-serving feature itself override this via their own `frontend_dist` fixture."""
+    from app.config import settings
+    monkeypatch.setattr(settings(), "frontend_dist", tmp_path / "no-frontend-dist-here")
+
+
 @pytest.fixture
 def client():
     with TestClient(app, headers=HEADERS) as client:
