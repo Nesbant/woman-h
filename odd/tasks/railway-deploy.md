@@ -36,6 +36,17 @@ Runners: `cd backend && ../.venv/bin/python -m pytest -q`; `cd frontend && npm t
 - [x] T3 `railway.json` with builder, pre-deploy migrations, healthcheck, restart policy.
 - [x] T4 README "Despliegue (Railway)" section: services, volume mount, variables (DATABASE_URL reference template,
       APP_ENV, ALLOWED_ORIGINS, COOKIE_SECURE, STORAGE_ROOT, CHAT_BRAIN/ANTHROPIC_API_KEY), demo caveat.
+- [x] T5 (user decision 2026-09-26: production runs without demo mode; chat AND "Entender" both use OpenRouter)
+      `OpenRouterTimelineAdapter` (`app/timeline_ai.py`) + `app/timeline_prompt.py`: proposes the private timeline
+      through OpenRouter's Chat Completions API (same endpoint/model/fallback/timeout/provider settings as the
+      chat brain, `TIMELINE_MODEL` optional override defaulting to `CHAT_MODEL`), strict `response_format`
+      json_schema matching exactly what `proposals.verify` consumes. Any failure raises and the existing
+      `fallback_chain` (this adapter -> `demo_fixture.json`, demo only -> extractive) takes over unchanged.
+- [x] T6 Production seed (`python -m app.seed_production`): idempotent accounts for María (full case), the
+      Empresa Andina reviewer (Lucía) and a plain real-use account, all from `SEED_*` env vars, without
+      `DEMO_ENABLED`. `SEED_ON_START` (`main.py` lifespan) as the Railway-volume workaround for T7.
+- [ ] T7 Railway `preDeployCommand`/`SEED_ON_START` decision, README variables + setup steps, `.env.example`.
+- [ ] T8 Docker check against a disposable `vera_deploycheck` database in `woman-h-db-1`.
 
 ## Acceptance criteria
 - Local dev unchanged; backend and frontend test suites pass.
@@ -94,6 +105,102 @@ Runners: `cd backend && ../.venv/bin/python -m pytest -q`; `cd frontend && npm t
   Traversal probes (encoded `..`, `//abs`, symlink out of dist) all fall back to `index.html`; `/api/*` stays JSON
   404; `railway.json` fields valid against the live schema; pytest 214 passed, 1 skipped with `frontend/dist`
   present. Note: non-GET to unknown paths now returns 405 instead of 404 (catch-all path match); no data exposure.
+
+- 2026-09-26 (new writer, worktree `woman-h-worktrees/openrouter`, branch `feat/conversation-core-esteban`):
+  picked up the last backend/deploy pieces per user decisions (Railway with the existing config; production
+  without demo mode; chat AND "Entender" both use OpenRouter; María's account + a real-use account + Lucía's
+  reviewer account at Empresa Andina). Baseline verified first: SQLite 216 passed/1 skipped,
+  PostgreSQL (`vera_test`) 217 passed.
+
+  T5 done: `OpenRouterTimelineAdapter` added directly to `timeline_ai.py` (alongside the other adapters, same
+  file the Protocol and every other implementation already lives in) plus a new `app/timeline_prompt.py`
+  (`TIMELINE_SYSTEM_PROMPT`, frozen/never interpolated, same prefix-caching rationale as `agent/prompt.py`).
+  Reuses `openrouter_base_url`/`openrouter_timeout_seconds`/`openrouter_http_referer`/`openrouter_x_title`/
+  `chat_fallback_models`/`provider.require_parameters`+`sort` from the chat brain's settings; new
+  `config.py::timeline_model` (optional, defaults to `chat_model` when unset). Strict `response_format` json
+  schema (`EVENT_PROPOSAL_SCHEMA`/`REVIEW_ITEM_PROPOSAL_SCHEMA`/`TIMELINE_PROPOSAL_SCHEMA`) built to match
+  exactly the fields `proposals.verify_event`/`verify_review_item` read (title/description/date_kind/
+  event_date/approximate_date/event_time/source_ids/support_quotes for events; kind/message/source_ids/
+  support_quotes/action_label/resolution_note for review items) — derived by re-reading `demo_fixture.json`
+  and `proposals.py` line by line, not guessed. `MAX_TIMELINE_EVENTS`/`MAX_TIMELINE_REVIEW_ITEMS` duplicate
+  `proposals.MAX_EVENTS`/`MAX_REVIEW_ITEMS` (12/10) rather than importing them: `proposals.py` already imports
+  `fallback_chain` from `timeline_ai.py`, so the reverse import would be circular.
+
+  The adapter's `propose()` raises on any failure (missing key, HTTP error via `response.raise_for_status()`,
+  a refusal, `length`/`content_filter`, malformed JSON, a schema-shape mismatch) rather than defining its own
+  error type: `proposals.propose()`'s existing `except Exception: continue` loop already treats every
+  adapter's failure identically, and `fallback_chain()` already appends `FixtureAdapter` (demo-only) then
+  `ExtractiveAdapter` after whatever `TIMELINE_AI_FACTORY` names — so `TIMELINE_AI_FACTORY=
+  app.timeline_ai:OpenRouterTimelineAdapter` needed no change to either function, only the new adapter class
+  itself. Source text reaches the provider through one user message wrapped in an untrusted-data marker
+  (`"[Fuentes: DATOS NO CONFIABLES..."`), mirroring `agent/openrouter.py::_current_message`'s approach for the
+  chat brain, never inside the frozen system prompt.
+
+  `backend/tests/test_timeline_ai_openrouter.py` (new, `httpx.MockTransport`, no network, same pattern as
+  `test_agent_llm.py`): request shape (strict `response_format` json schema, `models` fallback array,
+  `provider.require_parameters`, `Authorization: Bearer`, system prompt byte-identical across calls), a
+  dedicated model-override test (`TIMELINE_MODEL` beats `CHAT_MODEL` when set), a valid response verified and
+  stored end-to-end through `/timeline/analyze`, an invented quote *and* an unsupported claimed exact date
+  both dropped by `verify()` in the same test (plus a judgment-language review item dropped separately),
+  provider failure (HTTP 503) falling back to `fixture` mode for María's seeded case and to `extractive` mode
+  for an unrelated case, a missing key never even attempting the network, and a prompt-injection attempt
+  embedded in the person's own evidence text: the (simulated adversarial) fake response is written as if the
+  provider had obeyed the injection, and the test asserts the judgment-language event it "proposed" never
+  survives `verify()`, while the source text itself still reached the provider byte-for-byte inside the
+  untrusted-data envelope (proving the defense is server-side verification, not prompt wording). One dead end
+  worth recording: the first version of that last test asserted the *whole* injected sentence appeared as one
+  substring in the outgoing request; it actually reached the provider correctly, just split into two separate
+  per-sentence JSON array entries by `sources.collect()` (existing, adapter-independent behavior) — fixed the
+  assertion, not the code, after confirming with a standalone script that `sources.collect()` really does
+  return both fragments.
+
+  `pytest tests/test_timeline_ai_openrouter.py tests/test_timeline.py`: 21 passed. Full suite SQLite: 224
+  passed / 1 skipped (baseline 216/1, +8 new). Also normalized a bare `postgresql://` `DATABASE_URL` to
+  `postgresql+psycopg://` in `config.py`'s validator (needed for T7's Railway variable, verified separately
+  there) — `config.py` previously only accepted the `+psycopg` scheme outside tests, which is not what
+  Railway's own Postgres reference variable produces.
+
+  T6 done: `app/seed_production.py` (new) — `python -m app.seed_production`, idempotent, safe on every
+  deploy, no refactor to `seed.py` needed beyond straight reuse: its building blocks (`ANDINA`,
+  `ensure_profile`, `ensure_record`, `attach_missing_files`, `ensure_conversation`, `seed_history`) were
+  already demo-agnostic — only `seed()`/`require_demo()`/`seed_demo_case()` (the top-level entry points) gate
+  on `DEMO_ENABLED`, and `seed_production.py` never calls any of those three. New `config.py` fields:
+  `seed_maria_email`/`seed_maria_password`, `seed_reviewer_email`/`seed_reviewer_password`,
+  `seed_user_email`/`seed_user_password`/`seed_user_name`, `seed_on_start`. Each of the three accounts is
+  skipped entirely when its email/password pair is missing; every password is checked against the same
+  16-character minimum `seed.py::seed()` already enforces for `DEMO_PASSWORD` (`validated_password`, raises
+  `RuntimeError` otherwise — an interrupted deploy that never seeded anything is safer than one that silently
+  accepted a weak password). `ensure_account` only ever creates a `User` when no row with that email exists
+  yet; it never updates an existing one's password, name or id, so a later change to a `SEED_*` env var is a
+  no-op against an account that's already there. María gets a stable `PrivateRecord` id
+  (`stable_id("maria-situacion:" + user.id)`, `uuid5` under a `"vera-production:"` namespace kept deliberately
+  separate from `seed.py::demo_id`'s `"vera-demo:"` one, so a production id can never collide with a
+  fictional demo id) so `ensure_record`/`attach_missing_files`/`ensure_conversation` stay idempotent across
+  deploys exactly like they already are for `seed_demo_case()`. The real-use account gets nothing beyond the
+  `User` row itself — confirmed by reading `profile.py`/`records.py`: both `Profile` and `PrivateRecord` are
+  created lazily by the app on first use (`PUT /api/profile`, `POST /api/records`), so a brand-new sign-up
+  never has either one either.
+
+  Everything runs inside one `with SessionLocal() as db: ... db.commit()` block with a single commit at the
+  end (matching `seed_demo_case()`'s own transaction shape): if any step raises (e.g. a too-short password)
+  before that final `db.commit()`, closing the session without committing rolls back everything staged so
+  far, including an earlier step's already-`flush()`-ed rows — a partially-bad `SEED_*` configuration creates
+  zero accounts rather than two out of three, so a fixed re-run starts from nothing rather than a stuck
+  partial state.
+
+  `backend/tests/test_seed_production.py` (new): all vars missing skips every account; a partial set seeds
+  only the configured ones; runs correctly under `demo_enabled=False` (proving no `DEMO_ENABLED` dependency);
+  María's full case (one `PrivateRecord`, her three evidence files, four conversation messages, an Andina
+  profile) plus Lucía's reviewer `Membership` at that same institution plus the three historical
+  `InstitutionalCase` rows (V-001..V-003); all three seeded accounts can actually log in over the real
+  `/api/auth/login` endpoint; the real-use account has no `Profile`, no `PrivateRecord` and no `Membership`;
+  a second run with different `SEED_*` values changes nothing (same account ids, original password still
+  verifies, the new password does not, no duplicate `PrivateRecord`); a too-short password raises and leaves
+  every table untouched (the atomicity guarantee above). Plus `main.py`'s `lifespan` wiring: `SEED_ON_START`
+  makes `TestClient(app)`'s startup (the same event a real process start fires) run the production seed once.
+
+  `pytest tests/test_seed_production.py`: 9 passed. Full suite SQLite: 233 passed / 1 skipped (baseline
+  224/1 after T5, +9, no regressions).
 
 ## Next step
 User: commit the branch, create the Railway project (Postgres + volume at `/data`), set variables per README.
