@@ -1,3 +1,4 @@
+import type { RefObject } from 'react'
 import type { DemoView } from '../api/session'
 import type { Overview, User } from '../types'
 import { navigate } from '../router'
@@ -56,8 +57,10 @@ function SpaceSwitch({ user, demo, institutional, onDemo }: Common & { instituti
   </>
 }
 
-export function Sidebar(props: Common & PrivateProps & { institutional: boolean; caseCount: number | null }) {
-  return <aside className="sidebar" aria-label="Navegación">
+type DrawerProps = { open: boolean; panelRef: RefObject<HTMLElement | null> }
+
+export function Sidebar(props: Common & PrivateProps & { institutional: boolean; caseCount: number | null } & DrawerProps) {
+  return <aside ref={props.panelRef} id="mobile-sidebar" tabIndex={-1} className={`sidebar${props.open ? ' open' : ''}`} aria-label="Navegación">
     <Brand />
     {props.institutional ? <InstitutionalNav user={props.user} caseCount={props.caseCount} /> : <PrivateNav {...props} />}
     <div className="side-footer">
