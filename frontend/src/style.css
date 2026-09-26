@@ -55,6 +55,8 @@ h1, h2, h3, p { margin: 0 }
 .segmented button.inst[aria-pressed="true"] { color: var(--inst) }
 .content { flex: 1; min-width: 0; display: flex; flex-direction: column }
 .topbar { position: sticky; top: 0; z-index: 10; height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 40px; background: rgba(248, 247, 249, .92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line) }
+.topbar-left { display: flex; align-items: center; gap: 10px; min-width: 0 }
+.menu-btn { display: none; flex: none; width: 40px; height: 40px; border: 0; border-radius: 10px; background: var(--wash); color: var(--text-2); align-items: center; justify-content: center }
 .crumbs { display: flex; align-items: center; gap: 8px; font-size: 14px; min-width: 0 }
 .crumbs strong { font-weight: 600; white-space: nowrap }
 .crumbs span { color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
@@ -410,10 +412,40 @@ h1, h2, h3, p { margin: 0 }
 
 @media (max-width: 900px) {
   .layout { flex-direction: column }
-  .sidebar { position: static; width: 100%; height: auto; flex-direction: column }
-  .topbar, .main { padding-left: 16px; padding-right: 16px }
-  .login { grid-template-columns: 1fr; gap: 24px }
+  /* Sidebar becomes an off-canvas drawer; Topbar (with the menu button) is the compact mobile header. */
+  .sidebar {
+    position: fixed; top: 0; left: 0; z-index: 45; width: min(86vw, 320px); height: 100vh; height: 100dvh;
+    transform: translateX(-100%); transition: transform .2s ease, visibility 0s linear .2s; visibility: hidden;
+    box-shadow: var(--shadow-lg); flex-direction: column;
+    padding-top: max(20px, env(safe-area-inset-top)); padding-bottom: max(14px, env(safe-area-inset-bottom));
+    padding-left: max(14px, env(safe-area-inset-left));
+  }
+  /* Closed drawer is hidden from focus and assistive tech too, not only moved off-screen. */
+  .sidebar.open { transform: translateX(0); visibility: visible; transition: transform .2s ease }
+  .menu-btn { display: inline-flex }
+  .topbar, .main { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)) }
+  .login { grid-template-columns: minmax(0, 1fr); gap: 24px }
+  .demo-quick { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) }
+  .demo-quick .btn { white-space: normal; text-align: center }
   .case-grid { grid-template-columns: 64px 1fr 100px 1fr }
+  .col-side.sticky { position: static; top: auto }
+
+  /* Stepper: fits on one line via horizontal scroll instead of wrapping to two rows. */
+  .stepper { flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; padding-bottom: 2px }
+  .stepper-item { scroll-snap-align: start; flex: none }
+  .stepper::-webkit-scrollbar { display: none }
+
+  /* File rows: let the name/chip/actions wrap onto their own lines instead of squeezing the name to nothing. */
+  .file-row, .evidence-row { flex-wrap: wrap }
+  .file-name { flex: 1 1 180px }
+  .file-row .menu-actions { flex: 1 1 100% }
+
+  /* Touch targets and inputs. */
+  .btn-sm, .btn-md, .segmented button, .status-options button, .state-btn { min-height: 44px }
+  .close, .avatar { width: 44px; height: 44px }
+  .input, .textarea, .edit-area { font-size: 16px }
+
+  .toast { bottom: max(28px, env(safe-area-inset-bottom)) }
 }
 
 /* Dialogs and destructive actions */
