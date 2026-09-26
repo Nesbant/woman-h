@@ -54,6 +54,13 @@ Mode: off (no project/session TDD config). Runners: `backend/.venv/bin/python -m
 - [x] P10 Frontend: VERA Institutional (KPIs, table, detail, status segmented, assign, checklist)
 - [x] P11 Tests (backend + vitest), README demo section, e2e demo run on PostgreSQL with screenshots vs prototype
 
+- [x] Q QA fixes (accepted by user 2026-09-26, Playwright exploratory QA):
+  - [x] Q1 New situation: "Entender lo ocurrido" after typing lands on Entender (single POST /start)
+  - [x] Q2 Member accounts reach their institutional space while demo mode is on
+  - [x] Q3 Upload error clears on cancel / new file
+  - [x] Q4 Case table usable at 390px (no clipped column)
+  - [x] Q5 "No informada" instead of "No confirmada" when no mentioned person is shared
+
 ## Progress / evidence
 - P1–P4 backend done: migration 0008 (profiles, private_note, record_submissions), `profile.py`, `overview.py`,
   timeline title/event_time (literal-only) + review item event_ids/action_label/resolution_note, draft without
@@ -70,7 +77,9 @@ Mode: off (no project/session TDD config). Runners: `backend/.venv/bin/python -m
 - P11: vitest 9 passed (3/3 runs), build OK; new `e2e/demo.spec.ts` replaces 6 obsolete specs — 3/3 passes on fresh
   seed (one earlier failure right after a backend hot-reload, not reproduced). pytest PostgreSQL 128 passed,
   SQLite 127 passed / 1 skipped. README demo/accounts updated.
-- Not committed (user did not ask).
+- Committed and pushed as PR #2 (e409c55, fbce723, d3460a8).
+- QA round (Playwright, ~40 checks) found 5 UI bugs (Q1–Q5); each reproduced by a failing vitest first, then fixed.
+  Verified in browser (qa3: 6/6), vitest 13 passed (3/3 runs), build OK, e2e demo passed on fresh data. Backend untouched.
 
 ## Next step
 User review of the redesign; then commit/PR on `feat/vera-prototype-redesign` (stacked on PR #1).
