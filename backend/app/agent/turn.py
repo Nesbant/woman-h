@@ -119,8 +119,11 @@ def _recent_history(db: Session, record_id: str, limit=CONTEXT_MESSAGES) -> list
 def _run_brain(brain, db: Session, record_id: str, user_row: ConversationMessage) -> tuple[BrainStep, list[str]]:
     """The manual tool loop (at most `MAX_ROUNDS` rounds): ask the brain for its next step, run the tool it
     names through `agent/tools.py`'s single validated executor, refresh the case state, and repeat until the
-    brain answers with final text — or the round cap forces one, so the person is never left without a
-    reply."""
+    brain answers with final text. If every one of `MAX_ROUNDS` rounds spent its call on a tool (a message
+    with enough distinct facts to fill the whole budget), one extra round asks the brain again with
+    `final_only=True` — an answer, never another tool call — so the person still gets a real reply instead of
+    the generic `ROUND_LIMIT_TEXT`, which stays only as a last resort if that extra round itself fails or
+    somehow still comes back with a tool call."""
     tool_ctx = ToolContext(db=db, record_id=record_id, row=db.get(Timeline, record_id),
                            message_id=user_row.id, message_text=user_row.text)
     round_results: list[RoundResult] = []
@@ -134,6 +137,12 @@ def _run_brain(brain, db: Session, record_id: str, user_row: ConversationMessage
         result = execute(step.tool_call.name, step.tool_call.arguments, tool_ctx)
         round_results.append(RoundResult(name=step.tool_call.name, arguments=step.tool_call.arguments,
                                          content=result.content, is_error=result.is_error))
+    case_state = build_case_state(db, record_id)
+    final_step = brain.next_step(RoundContext(case_state=case_state, recent_messages=history, user_text=user_row.text,
+                                              attachment_ids=user_row.attachment_ids, round_results=round_results,
+                                              final_only=True))
+    if final_step.tool_call is None:
+        return final_step, tool_ctx.touched_event_ids
     return BrainStep(tool_call=None, reply_text=ROUND_LIMIT_TEXT), tool_ctx.touched_event_ids
 
 

@@ -28,12 +28,20 @@ class RoundResult:
 @dataclass
 class RoundContext:
     """Everything a brain needs to decide its next step. Immutable for the round: what grows across rounds
-    is only `round_results`, one entry longer every time `turn.py` runs the tool call the brain asked for."""
+    is only `round_results`, one entry longer every time `turn.py` runs the tool call the brain asked for.
+
+    `final_only`: set only for the one extra round `turn.py` grants after `MAX_ROUNDS` tool rounds are spent
+    (see `turn._run_brain`) — the brain must answer with `reply_text` this round, never another tool call.
+    `OpenRouterBrain` turns this into `tool_choice: "none"` on that one request (`tools` stays in the body so
+    the reconstructed history's earlier `tool_calls` messages stay valid); `ScriptedBrain` already always
+    finalizes once every fact-clause has a candidate, so it never even reaches this round with a tool call
+    still pending and ignores the flag."""
     case_state: CaseState
     recent_messages: list[ChatMessage]
     user_text: str
     attachment_ids: list[str]
     round_results: list[RoundResult] = field(default_factory=list)
+    final_only: bool = False
 
 
 @dataclass

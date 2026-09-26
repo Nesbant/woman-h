@@ -6,6 +6,7 @@ from uuid import uuid4
 import httpx
 import pytest
 from app.agent import openrouter as openrouter_module
+from app.agent import turn as turn_module
 from app.agent.tools import TOOL_SCHEMAS
 from conftest import login
 
@@ -197,6 +198,62 @@ def test_two_facts_in_one_message_via_two_tool_rounds_then_confirm_the_right_one
     assert other_persisted["status"] == "proposed"
 
     # 3 rounds x 1st turn (2 creates + 1 final) + 2 rounds x 2nd turn (1 confirm + 1 final) = 5 calls.
+    assert len(fake.bodies()) == 5
+
+
+# --- exactly at, and one over, the round budget: the extra `final_only` round -------------------------------
+
+QUOTE_1, QUOTE_2, QUOTE_3, QUOTE_4 = ("me escribió pidiéndome explicaciones", "me llamó tres veces seguidas",
+                                     "me mandó un correo agresivo", "hizo un comentario delante de todos")
+FOUR_FACTS_TEXT = f"El lunes {QUOTE_1}; el martes {QUOTE_2}; el miércoles {QUOTE_3} y el jueves {QUOTE_4}."
+
+
+def _create_args(quote, title):
+    return {"event_id": None, "title": title, "description": quote, "date_kind": "unknown", "event_date": None,
+           "approximate_date": None, "event_time": None, "origin": "user_statement", "user_quote": quote}
+
+
+def test_all_four_rounds_spent_on_tools_get_one_extra_final_only_round_for_the_reply(client, monkeypatch, openrouter_settings):
+    case_id = start_case(client)
+    creates = [_create_args(quote, f"Hecho {index + 1}")
+              for index, quote in enumerate([QUOTE_1, QUOTE_2, QUOTE_3, QUOTE_4])]
+    fake = install_fake_transport(monkeypatch, [
+        *(_tool_call_response("create_or_update_candidate_event", args, call_id=f"call-{index}")
+         for index, args in enumerate(creates)),
+        _final_response("Entendí cuatro momentos distintos. Los dejé pendientes para que los revises."),
+    ])
+
+    response = send(client, case_id, FOUR_FACTS_TEXT)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "ai"
+    assert len(body["case_state"]["events"]) == 4
+    assert body["assistant_message"]["text"] != turn_module.ROUND_LIMIT_TEXT
+
+    bodies = fake.bodies()
+    assert len(bodies) == 5  # 4 tool rounds + 1 extra final-only round
+    assert all(body["tool_choice"] == "auto" for body in bodies[:4])
+    assert bodies[4]["tool_choice"] == "none"  # the extra round forces a plain answer, never another tool call
+    assert bodies[4]["tools"] == bodies[0]["tools"]  # kept, so the reconstructed history stays valid
+
+
+def test_final_only_round_still_returning_a_tool_call_falls_back_to_the_round_limit_reply(client, monkeypatch, openrouter_settings):
+    case_id = start_case(client)
+    creates = [_create_args(quote, f"Hecho {index + 1}")
+              for index, quote in enumerate([QUOTE_1, QUOTE_2, QUOTE_3, QUOTE_4])]
+    misbehaving_extra = _create_args(QUOTE_1, "Quinto hecho, no debería ejecutarse")
+    fake = install_fake_transport(monkeypatch, [
+        *(_tool_call_response("create_or_update_candidate_event", args, call_id=f"call-{index}")
+         for index, args in enumerate(creates)),
+        _tool_call_response("create_or_update_candidate_event", misbehaving_extra, call_id="call-extra"),
+    ])
+
+    response = send(client, case_id, FOUR_FACTS_TEXT)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "ai"  # a normal step, not a BrainError: no fallback to ScriptedBrain
+    assert len(body["case_state"]["events"]) == 4  # the 5th (final-only) tool call was never executed
+    assert body["assistant_message"]["text"] == turn_module.ROUND_LIMIT_TEXT
     assert len(fake.bodies()) == 5
 
 

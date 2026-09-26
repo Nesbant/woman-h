@@ -185,3 +185,33 @@ def test_emotions_opinions_questions_and_interpretations_never_create_a_candidat
     assert body["case_state"]["events"] == []
     assert body["touched_event_ids"] == []
     assert body["assistant_message"]["text"]
+
+
+# --- exactly at, and one over, the round budget (turn.MAX_ROUNDS) ------------------------------------------
+
+FOUR_FACTS_TEXT = ("El lunes me escribió preguntando cosas raras; el martes me llamó tres veces; el miércoles "
+                   "hizo un comentario en la reunión y el jueves me mandó un correo agresivo.")
+
+
+def test_four_facts_fill_the_round_budget_and_still_get_a_real_final_reply(client):
+    """`turn.MAX_ROUNDS=4`: 4 fact-clauses use every round on a `create_or_update_candidate_event` call, so
+    the brain never reaches its own finalize step inside the loop — the orchestrator's one extra
+    `final_only` round is what turns this into a real reply instead of the generic round-limit text."""
+    case_id = start_case(client)
+    response = send(client, case_id, FOUR_FACTS_TEXT)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "demo"
+    assert len(candidate_events(body)) == 4
+    assert body["assistant_message"]["text"] != turn_module.ROUND_LIMIT_TEXT
+
+
+def test_more_facts_than_the_round_budget_gets_the_round_limit_reply(client):
+    case_id = start_case(client)
+    text = FOUR_FACTS_TEXT[:-1] + "; y también el viernes tuvimos un encuentro incómodo."
+    response = send(client, case_id, text)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "demo"
+    assert len(candidate_events(body)) == 4  # bounded by MAX_ROUNDS; the 5th fact-clause never gets a round
+    assert body["assistant_message"]["text"] == turn_module.ROUND_LIMIT_TEXT
