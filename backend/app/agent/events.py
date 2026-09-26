@@ -108,3 +108,18 @@ def new_message_event(message_id, message_text: str, quote: str, title: str, des
     return {"id": str(uuid4()), "source": source, "sources": [source], "support_quotes": [quote],
             "original": dict(content), **content, "status": "proposed", "reviewed": False, "edited": False,
             "needs_review": True, "mode": "message", "origin": origin}
+
+
+def update_message_event(event: dict, message_id, message_text: str, quote: str, title: str, description: str,
+                         date_kind: str, event_date: str | None = None, approximate_date: str | None = None,
+                         event_time: str | None = None, origin: str = "user_statement",
+                         label: str = "Tu mensaje en el chat") -> dict:
+    """Replaces a still-`proposed`, `mode='message'` candidate's content with a fresher telling, re-sourced to
+    the message that just restated it (the tool executor, EST-03, enforces the mode/status precondition before
+    calling this). Keeps the event's `id`, `mode`, `status`, review flags and `original`; only content, source
+    and quotes move."""
+    source = message_source(message_id, message_text, quote, label)
+    content = {"title": title, "description": description, "date_kind": date_kind, "event_date": event_date,
+              "approximate_date": approximate_date, "event_time": event_time}
+    quotes = list(dict.fromkeys([*(event.get("support_quotes") or []), quote]))
+    return {**event, "source": source, "sources": [source], "support_quotes": quotes, **content}
