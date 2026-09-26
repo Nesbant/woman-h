@@ -13,13 +13,13 @@ multi-process PostgreSQL deployment additionally takes a transaction-scoped advi
 different worker processes serialize the same way; on SQLite `_advisory_lock` is a no-op (always granted),
 since SQLite has no such mechanism and, being single-process here, does not need one.
 
-EST-05 (issue #11): when the configured brain is `claude` and it raises `agent/llm.py::BrainError` on any
-round (missing key, a typed SDK error, a `refusal`/`max_tokens` stop, a judgment-language reply, ...),
-`_claude_or_fallback` rolls the whole attempted turn back — discarding any tool-call mutations that
-provider's earlier rounds already made in memory this turn, exactly like a normal exception would have to —
-and reruns it from scratch with a fresh `ScriptedBrain`, so the person always gets `mode: "demo"` and never a
-5xx or a half-written turn. On PostgreSQL `db.rollback()` also ends the transaction that held the advisory
-lock, so the fallback takes it again before rerunning (409 if another worker got it in between)."""
+EST-05 (issue #11): when the configured brain raises `agent/openrouter.py::BrainError` on any round (missing
+key, an HTTP/timeout error, a `length`/`content_filter` finish reason, a judgment-language reply, ...),
+`_brain_or_fallback` rolls the whole attempted turn back — discarding any tool-call mutations that provider's
+earlier rounds already made in memory this turn, exactly like a normal exception would have to — and reruns
+it from scratch with a fresh `ScriptedBrain`, so the person always gets `mode: "demo"` and never a 5xx or a
+half-written turn. On PostgreSQL `db.rollback()` also ends the transaction that held the advisory lock, so
+the fallback takes it again before rerunning (409 if another worker got it in between)."""
 import logging
 import threading
 from contextlib import contextmanager
@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session
 from ..models import ConversationMessage, Timeline
 from .brain import BrainStep, RoundContext, RoundResult, get_brain
 from .contracts import ChatMessage, ChatTurnRequest, ChatTurnResponse
-from .llm import BrainError
+from .openrouter import BrainError
 from .scripted import ScriptedBrain
 from .state import build_case_state
 from .tools import ToolContext, execute
@@ -152,7 +152,7 @@ def _response(db: Session, record_id: str, user_row, reply_row, mode, suggested_
                             case_state=build_case_state(db, record_id), mode=mode)
 
 
-def _claude_or_fallback(db: Session, record_id: str, data: ChatTurnRequest, existing_user, brain):
+def _brain_or_fallback(db: Session, record_id: str, data: ChatTurnRequest, existing_user, brain):
     """Runs this turn's brain loop; on `BrainError` (see the module docstring), discards everything this
     attempt staged and reruns the whole turn with a fresh `ScriptedBrain`. Returns `(user_row, step, touched,
     mode)` — a fresh `user_row` too, since a rollback expires (and, if it was only flushed and never
@@ -195,7 +195,7 @@ def run_turn(db: Session, record_id: str, data: ChatTurnRequest, brain=None) -> 
         if existing_user is not None and existing_reply is not None:
             return _response(db, record_id, existing_user, existing_reply, brain.mode)
 
-        user_row, step, touched, mode = _claude_or_fallback(db, record_id, data, existing_user, brain)
+        user_row, step, touched, mode = _brain_or_fallback(db, record_id, data, existing_user, brain)
         reply_row = _save_reply(db, record_id, data, step, touched)
         db.commit()
         return _response(db, record_id, user_row, reply_row, mode, step.suggested_actions)

@@ -14,6 +14,9 @@ traceability, Private vs Institutional and the final share flow. This document c
   approval). EST-01…EST-07 continue on `feat/conversation-core-esteban`, stacked on the contract branch until that
   PR merges, then updated with `git merge origin/iteration/conversational-vera`.
 - D3 EST-08 depends on CMP-07 (teammate) and runs last, on `fix/conversation-integration`.
+- D4 (user, 2026-09-26): OpenRouter replaces Anthropic as the real chat provider. `CHAT_BRAIN=openrouter`
+  (was `claude`), `agent/llm.py::ClaudeBrain` removed and replaced by `agent/openrouter.py::OpenRouterBrain`
+  over OpenRouter's OpenAI-compatible Chat Completions API. `anthropic` dependency removed.
 
 ## Constraints
 Epic principles are non-negotiable: VERA never judges, never recommends sanctions, never pushes to report, never
@@ -30,7 +33,8 @@ Runners: `backend/.venv/bin/python -m pytest -q` (SQLite; PG via `TEST_DATABASE_
 - [x] EST-02 (#8) Typed event ⇄ timeline dict, origin, `message` source, `merge_proposals` keeps conversation events
 - [x] EST-03 (#9) Validated tool executor (6 tools, strict schemas) + `state.build_case_state`
 - [x] EST-04 (#10) Turn orchestrator + ScriptedBrain, real messages/state endpoints, idempotency, 409
-- [x] EST-05 (#11) Claude brain (anthropic SDK, strict tools, caching, structured output, fallback to scripted)
+- [x] EST-05 (#11) Real brain (strict tools, structured output, fallback to scripted) — revised 2026-09-26
+  (D4): OpenRouter (`agent/openrouter.py::OpenRouterBrain`) replaces the original Anthropic SDK brain
 - [x] EST-06 (#12) `prepare_share_preview` never submits
 - [x] EST-07 (#13) Seed conversation, safety tests (both brains), README/SPEC
 - [ ] EST-08 (#14) Integration + DoD — blocked on CMP-07
@@ -278,5 +282,71 @@ Runners: `backend/.venv/bin/python -m pytest -q` (SQLite; PG via `TEST_DATABASE_
   - For the teammate: message-sourced facts show the chip "Relato personal"; the snapshot label is
     "Relato de la persona (conversación)".
 
+- 2026-09-26 EST-05 revised — OpenRouter replaces Anthropic (D4): `backend/app/agent/llm.py::ClaudeBrain`
+  removed entirely; `backend/app/agent/openrouter.py::OpenRouterBrain` (new) implements the same
+  `AgentBrain`/`next_step(RoundContext) -> BrainStep` contract over OpenRouter's OpenAI-compatible Chat
+  Completions API (`POST /api/v1/chat/completions`, Bearer `OPENROUTER_API_KEY`) instead of the Anthropic
+  SDK. Same manual tool loop shape as before (still bounded by `turn.py`'s own `MAX_ROUNDS=4`, not the
+  provider): the six `agent/tools.py::TOOL_SCHEMAS` converted to OpenAI function-tool definitions
+  (`type: "function"`, `strict: true`, same `input_schema` reused verbatim as `parameters`), `tool_choice:
+  "auto"`, `parallel_tool_calls: false` (the orchestrator, not the provider, runs more than one tool call per
+  turn — `BrainStep.tool_call` is singular), one `role: "tool"` message per round's result (`tool_call_id`
+  matched to the preceding assistant `tool_calls` entry, `{"is_error": ..., "content": ...}` as its JSON
+  content, since OpenAI's tool-message shape has no `is_error` field of its own), final replies via
+  `response_format: {"type": "json_schema", "json_schema": {"name": "vera_reply", "strict": true, "schema":
+  ...}}` mirroring the previous `FINAL_REPLY_FORMAT` schema exactly. `models: [chat_model, *chat_fallback_models]`
+  (OpenRouter's own model-fallback array) plus `provider: {"require_parameters": true, "sort": "throughput"}`
+  — `require_parameters` so routing only picks providers that actually support `tools` +
+  `structured_outputs` for the chosen model; `sort: "throughput"` because this is a chat UI waiting on a
+  reply, where turnaround time matters more than shaving fractions of a cent (the model choice itself already
+  controls cost). Optional `HTTP-Referer`/`X-Title` headers from settings, sent only when configured. Dropped
+  Anthropic's explicit `cache_control` breakpoint (no OpenAI-compatible equivalent field); `system` + `tools`
+  still never change between requests/turns/cases, so any OpenAI-compatible provider with automatic prefix
+  caching still benefits, just with no request-side knob to force it or `cache_read_input_tokens` to read
+  back generically. Same `BrainError`/fallback contract as before (`agent/turn.py::_brain_or_fallback`,
+  renamed from `_claude_or_fallback`): missing key, HTTP error, timeout, `finish_reason in {"length",
+  "content_filter"}`, a refusal, malformed JSON, schema mismatch, or judgment language all raise
+  `BrainError` → the whole turn reruns with a fresh `ScriptedBrain`, `mode: "demo"`, never a 5xx.
+
+  `config.py`: `chat_brain: Literal["scripted", "openrouter"]` (was `"claude"`); `openrouter_api_key`,
+  `chat_model` (default `google/gemini-3.1-flash-lite`), `chat_fallback_models` (default
+  `["deepseek/deepseek-v4-flash"]`), `openrouter_base_url` (default the public OpenRouter endpoint),
+  `openrouter_timeout_seconds` (default 30), optional `openrouter_http_referer`/`openrouter_x_title`.
+  `anthropic_api_key`/`chat_effort` removed. Both default models verified 2026-09-26 in OpenRouter's public
+  model list as supporting `tools` + `structured_outputs`; prices per 1M tokens in/out:
+  `google/gemini-3.1-flash-lite` $0.25/$1.50, `deepseek/deepseek-v4-flash` $0.047/$0.094 — the primary is a
+  fast, capable model for a short chat/tool-calling workload, the fallback a cheaper one for when the primary
+  provider is unavailable. `.env.example`, README (variables table + demo-vs-real-provider notice) and SPEC
+  §61 ("Cerebros: `ScriptedBrain` y `OpenRouterBrain`") updated to match.
+
+  Dependencies: `anthropic==1.8.0` removed from `requirements.txt`; from `requirements.lock.txt`, removed the
+  6 packages nothing else in the lock still needs (verified with `importlib.metadata` requires of every
+  remaining package): `anthropic`, `docstring_parser`, `httpcore2`, `httpx2`, `jiter`, `sniffio`, `truststore`
+  (`anyio`, `httpcore`, `httpx`, `starlette` etc. all stayed — confirmed none of them require the removed
+  ones). Proved the trimmed lock still installs and imports cleanly: a throwaway venv (matching Python
+  3.14.4), `pip install -r backend/requirements.lock.txt`, full pytest suite — 210 passed / 1 skipped, same
+  as the shared venv, no import errors; venv deleted afterward.
+
+  Tests: `backend/tests/test_agent_llm.py` rewritten against a FAKE OpenRouter transport
+  (`httpx.MockTransport`, no network) — happy path through the full EST-04 flow (fact → candidate →
+  "guárdalo" → confirmed, `mode: "ai"`) asserting request shape (strict tools, strict `response_format` json
+  schema, `models` fallback list, `provider.require_parameters`, `Authorization: Bearer`, `parallel_tool_calls:
+  false`, tool results as `role: "tool"` with matching `tool_call_id`), plus fallback-to-demo on a missing
+  key, an HTTP 5xx, a timeout, and an invalid JSON body, and the judgment-language guardrail. `pytest
+  tests/test_agent_llm.py tests/test_agent_safety.py tests/test_conversation_turn.py tests/test_agent_tools.py`:
+  38 passed. Full suite SQLite: 210 passed / 1 skipped (baseline 207/1, +3 new `test_agent_llm.py` cases: a
+  dedicated HTTP-5xx test and an invalid-JSON-body test are new; the previous "typed SDK error" test became
+  "a timeout" 1:1). Full suite PostgreSQL (`vera_test`, `TEST_DATABASE_URL`): 211 passed (baseline 209, +2, no
+  regressions). `test_agent_safety.py` kept parametrized over both brains (`["scripted", "openrouter"]`), same
+  fake-transport pattern, unchanged assertions — still 2 passed.
+
+  A real smoke against OpenRouter was not possible: no `OPENROUTER_API_KEY` in the environment.
+
+  `rg -n -i anthropic backend .env.example README.md` leaves only historical/explanatory prose in
+  `agent/openrouter.py`'s module docstring and comments (why `ClaudeBrain` was replaced, why there is no
+  `cache_control` equivalent, noting `TOOL_SCHEMAS`'s Anthropic-shaped input before conversion) and one
+  mention in `test_agent_llm.py`'s comment about the previous fake — no code, dependency, or config
+  reference to Anthropic remains.
+
 ## Next step
-EST-08 (#14): integration + DoD — blocked on CMP-07 (teammate). Real-provider smoke needs `ANTHROPIC_API_KEY`.
+EST-08 (#14): integration + DoD — blocked on CMP-07 (teammate). Real-provider smoke needs `OPENROUTER_API_KEY`.

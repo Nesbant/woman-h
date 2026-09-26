@@ -60,15 +60,18 @@ Pruebas: `cd backend && ../.venv/bin/python -m pytest -q` y `cd frontend && npm 
 | `MAX_UPLOAD_BYTES`, `MAX_IMAGE_PIXELS`, `MAX_PDF_PAGES` | Límites de archivos |
 | `TIMELINE_AI_FACTORY` | `app.timeline_ai:FixtureAdapter` (defecto) o `app.timeline_ai:HttpAdapter` |
 | `TIMELINE_AI_URL` / `TIMELINE_AI_KEY` | Endpoint HTTPS del proveedor para `HttpAdapter` |
-| `CHAT_BRAIN` | Cerebro de la conversación (epic #5): `scripted` (defecto) o `claude` — ver aviso abajo |
-| `ANTHROPIC_API_KEY` | Obligatoria solo con `CHAT_BRAIN=claude` |
-| `CHAT_MODEL` | Modelo de Anthropic para `CHAT_BRAIN=claude` (defecto `claude-sonnet-5`) |
-| `CHAT_EFFORT` | Esfuerzo de razonamiento (`low`…`max`, defecto `low`) para `CHAT_BRAIN=claude` |
+| `CHAT_BRAIN` | Cerebro de la conversación (epic #5): `scripted` (defecto) o `openrouter` — ver aviso abajo |
+| `OPENROUTER_API_KEY` | Obligatoria solo con `CHAT_BRAIN=openrouter` |
+| `CHAT_MODEL` | Modelo primario en OpenRouter (defecto `google/gemini-3.1-flash-lite`) |
+| `CHAT_FALLBACK_MODELS` | Lista JSON de modelos de repuesto, en orden (defecto `["deepseek/deepseek-v4-flash"]`) |
+| `OPENROUTER_BASE_URL` | Endpoint de Chat Completions (defecto el público de OpenRouter) |
+| `OPENROUTER_TIMEOUT_SECONDS` | Timeout HTTP por llamada (defecto 30) |
+| `OPENROUTER_HTTP_REFERER` / `OPENROUTER_X_TITLE` | Opcionales, solo para el ranking de apps de OpenRouter |
 | `API_PROXY_TARGET` | En `frontend/.env`: destino del proxy de Vite |
 
 **Fallback de IA (cronología):** siempre se intenta *adaptador configurado → `backend/app/demo_fixture.json` → selección extractiva*. Todo lo propuesto se verifica en el servidor: cada evento debe citar fuentes existentes con citas literales; fechas exactas sin respaldo quedan "pendientes de confirmar"; puntajes, culpabilidad, credibilidad o sanciones se descartan.
 
-**Conversación con VERA — modo demo vs. proveedor real:** con `CHAT_BRAIN=scripted` (defecto), la conversación corre siempre en `mode: "demo"`, con un guion determinístico (`app/agent/scripted.py`) que no llama a ningún servicio externo. **Con `CHAT_BRAIN=claude`, cada mensaje que la persona escribe en el chat viaja a la API de Anthropic** (proveedor externo) para producir la respuesta y decidir qué herramienta llamar; requiere `ANTHROPIC_API_KEY`. Si falta la clave, el proveedor falla, se corta por `refusal`/`max_tokens`, devuelve una salida inválida o su respuesta usa lenguaje de juicio (SPEC §15), el turno completo se reintenta con `ScriptedBrain` y responde igual en `mode: "demo"` — nunca con un error 5xx ni un turno a medio guardar. Ninguna herramienta de la conversación envía nada ni crea un caso institucional por sí sola, sea cual sea el cerebro activo (ver SPEC, sección "VERA conversacional").
+**Conversación con VERA — modo demo vs. proveedor real:** con `CHAT_BRAIN=scripted` (defecto), la conversación corre siempre en `mode: "demo"`, con un guion determinístico (`app/agent/scripted.py`) que no llama a ningún servicio externo. **Con `CHAT_BRAIN=openrouter`, cada mensaje que la persona escribe en el chat viaja a OpenRouter y al proveedor del modelo elegido** (`CHAT_MODEL`/`CHAT_FALLBACK_MODELS`, proveedores externos); requiere `OPENROUTER_API_KEY`. Si falta la clave, el proveedor falla o hay timeout, se corta por un límite de tokens o un filtro de contenido, devuelve una salida inválida o su respuesta usa lenguaje de juicio (SPEC §15), el turno completo se reintenta con `ScriptedBrain` y responde igual en `mode: "demo"` — nunca con un error 5xx ni un turno a medio guardar. Ninguna herramienta de la conversación envía nada ni crea un caso institucional por sí sola, sea cual sea el cerebro activo (ver SPEC, sección "VERA conversacional").
 
 ## Cuentas demo
 

@@ -7,7 +7,6 @@ pydantic-settings==2.13.1
 pwdlib[argon2]==0.3.0
 pytest==9.0.2
 httpx==0.28.1
-anthropic==1.8.0
 Pillow==12.3.0
 pypdf==6.19.0
 pypdfium2==5.13.0

@@ -1,14 +1,15 @@
-"""EST-05 (issue #11): `ClaudeBrain` exercised through the real HTTP endpoints, but always against a FAKE
-Anthropic client — no network, no real API key. `pytest tests/test_agent_llm.py`."""
+"""EST-05 (issue #11, revised 2026-09-26): `OpenRouterBrain` exercised through the real HTTP endpoints, but
+always against a FAKE OpenRouter transport (`httpx.MockTransport` — no network, no real API key).
+`pytest tests/test_agent_llm.py`."""
 import json
-from types import SimpleNamespace
 from uuid import uuid4
+import httpx
 import pytest
-import anthropic
-import httpx2
-from app.agent import llm as llm_module
+from app.agent import openrouter as openrouter_module
 from app.agent.tools import TOOL_SCHEMAS
 from conftest import login
+
+_RealClient = httpx.Client  # captured before any test monkeypatches `openrouter_module.httpx.Client`
 
 MARIA = "maria@example.test"
 MESSAGE_TEXT = "El miércoles mi supervisor me hizo un comentario que me incomodó."
@@ -26,64 +27,70 @@ def send(client, case_id, text, client_message_id=None):
 
 
 @pytest.fixture
-def claude_settings(monkeypatch):
-    """`CHAT_BRAIN=claude` with a present (fake) key, keeping every other real setting as-is."""
+def openrouter_settings(monkeypatch):
+    """`CHAT_BRAIN=openrouter` with a present (fake) key, keeping every other real setting as-is."""
     from app.config import settings as real_settings
-    fake = real_settings().model_copy(update={"chat_brain": "claude", "anthropic_api_key": "fake-test-key",
-                                              "chat_model": "claude-sonnet-5", "chat_effort": "low"})
+    fake = real_settings().model_copy(update={
+        "chat_brain": "openrouter", "openrouter_api_key": "fake-test-key",
+        "chat_model": "google/gemini-3.1-flash-lite", "chat_fallback_models": ["deepseek/deepseek-v4-flash"]})
     monkeypatch.setattr("app.config.settings", lambda: fake)
     return fake
 
 
-def _block(kind, **fields):
-    return SimpleNamespace(type=kind, **fields)
+def _tool_call_response(name, arguments, call_id="call-1"):
+    body = {"choices": [{"finish_reason": "tool_calls", "message": {
+        "role": "assistant", "content": None,
+        "tool_calls": [{"id": call_id, "type": "function",
+                       "function": {"name": name, "arguments": json.dumps(arguments)}}]}}]}
+    return httpx.Response(200, json=body)
 
 
-def _tool_use(name, arguments):
-    return SimpleNamespace(stop_reason="tool_use", stop_details=None,
-                           content=[_block("tool_use", id="call-1", name=name, input=arguments)])
-
-
-def _final(reply_text, suggested_actions=()):
+def _final_response(reply_text, suggested_actions=()):
     payload = json.dumps({"reply_text": reply_text, "suggested_actions": list(suggested_actions)})
-    return SimpleNamespace(stop_reason="end_turn", stop_details=None, content=[_block("text", text=payload)])
+    body = {"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": payload}}]}
+    return httpx.Response(200, json=body)
 
 
-class FakeMessages:
-    """Queues canned responses in call order; records every outgoing request for shape assertions."""
+class FakeTransport:
+    """Queues canned `httpx.Response`s in call order; records every outgoing `httpx.Request` for shape
+    assertions, exactly like the previous Anthropic fake recorded every `client.messages.create(**kwargs)`."""
     def __init__(self, responses):
         self.responses = list(responses)
-        self.calls = []
+        self.requests: list[httpx.Request] = []
 
-    def create(self, **kwargs):
-        self.calls.append(kwargs)
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
         assert self.responses, "El test se quedó sin respuestas falsas encoladas"
         return self.responses.pop(0)
 
-
-class FakeClient:
-    def __init__(self, responses):
-        self.messages = FakeMessages(responses)
+    def bodies(self):
+        return [json.loads(request.content) for request in self.requests]
 
 
-def install_fake_client(monkeypatch, responses):
-    """Every `anthropic.Anthropic(...)` construction (one per turn, see `ClaudeBrain._client_or_none`)
-    returns this same fake, so its response queue is shared and consumed in order across turns."""
-    fake = FakeClient(responses)
-    monkeypatch.setattr(llm_module.anthropic, "Anthropic", lambda **kwargs: fake)
+def install_fake_transport(monkeypatch, responses):
+    """Every `httpx.Client(...)` construction inside `OpenRouterBrain.next_step` (one per round) gets this
+    same fake transport instead of real network, so its response queue is shared and consumed in order
+    across rounds and turns."""
+    fake = FakeTransport(responses)
+
+    def fake_client(**kwargs):
+        kwargs["transport"] = httpx.MockTransport(fake.handler)
+        return _RealClient(**kwargs)
+
+    monkeypatch.setattr(openrouter_module.httpx, "Client", fake_client)
     return fake
 
 
 # --- acceptance criteria (issue #11) --------------------------------------------------------------------
 
-def test_happy_path_reaches_mode_ai_through_the_est04_flow_with_a_stable_cached_prefix(client, monkeypatch, claude_settings):
+def test_happy_path_reaches_mode_ai_through_the_est04_flow_with_a_stable_request_shape(client, monkeypatch, openrouter_settings):
     case_id = start_case(client)
     create_args = {"event_id": None, "title": "Comentario del supervisor", "description": MESSAGE_TEXT,
                    "date_kind": "unknown", "event_date": None, "approximate_date": None, "event_time": None,
                    "origin": "user_statement", "user_quote": NARRATE_QUOTE}
-    fake = install_fake_client(monkeypatch, [
-        _tool_use("create_or_update_candidate_event", create_args),
-        _final("Genial, dejé anotado ese comentario. Contame si pasó algo más."),
+    fake = install_fake_transport(monkeypatch, [
+        _tool_call_response("create_or_update_candidate_event", create_args),
+        _final_response("Genial, dejé anotado ese comentario. Contame si pasó algo más."),
     ])
 
     narrated = send(client, case_id, MESSAGE_TEXT)
@@ -94,9 +101,9 @@ def test_happy_path_reaches_mode_ai_through_the_est04_flow_with_a_stable_cached_
     assert len(events) == 1 and events[0]["status"] == "candidate"
     event_id = events[0]["id"]
 
-    fake.messages.responses.extend([
-        _tool_use("confirm_event", {"event_id": event_id, "user_quote": "quiero dejar constancia de eso"}),
-        _final("Quedó confirmado, gracias por contármelo."),
+    fake.responses.extend([
+        _tool_call_response("confirm_event", {"event_id": event_id, "user_quote": "quiero dejar constancia de eso"}),
+        _final_response("Quedó confirmado, gracias por contármelo."),
     ])
     confirmed = send(client, case_id, "Guárdalo, quiero dejar constancia de eso.")
     assert confirmed.status_code == 200
@@ -105,20 +112,42 @@ def test_happy_path_reaches_mode_ai_through_the_est04_flow_with_a_stable_cached_
     confirmed_event = next(e for e in confirmed_body["case_state"]["events"] if e["id"] == event_id)
     assert confirmed_event["status"] == "confirmed"
 
-    # Request shape: `system` (with its cache_control breakpoint) and `tools` never change across any of
-    # these 4 calls (2 rounds x 2 turns) — the exact condition that lets `cache_read_input_tokens` be > 0
-    # from the second call on, in the real API (unreachable from this sandboxed test).
-    assert len(fake.messages.calls) == 4
-    for call in fake.messages.calls:
-        assert call["system"] == [{"type": "text", "text": llm_module.SYSTEM_PROMPT,
-                                   "cache_control": {"type": "ephemeral"}}]
-        assert call["tools"] == TOOL_SCHEMAS
-        assert call["model"] == "claude-sonnet-5"
+    # Request shape: 2 rounds x 2 turns = 4 calls, all sharing the same stable, provider-cacheable prefix
+    # (system message + tools never change across any of them).
+    bodies = fake.bodies()
+    assert len(bodies) == 4
+    expected_tools = [{"type": "function", "function": {"name": schema["name"], "description": schema["description"],
+                                                        "parameters": schema["input_schema"], "strict": True}}
+                      for schema in TOOL_SCHEMAS]
+    for request, body in zip(fake.requests, bodies):
+        assert body["messages"][0] == {"role": "system", "content": openrouter_module.SYSTEM_PROMPT}
+        assert body["tools"] == expected_tools
+        assert body["tool_choice"] == "auto"
+        assert body["parallel_tool_calls"] is False
+        assert body["model"] == "google/gemini-3.1-flash-lite"
+        assert body["models"] == ["google/gemini-3.1-flash-lite", "deepseek/deepseek-v4-flash"]
+        assert body["provider"] == {"require_parameters": True, "sort": "throughput"}
+        assert body["response_format"]["type"] == "json_schema"
+        assert body["response_format"]["json_schema"]["strict"] is True
+        assert body["response_format"]["json_schema"]["name"] == "vera_reply"
+        assert request.headers["authorization"] == "Bearer fake-test-key"
+
+    # The 2nd call of each turn carries the 1st round's tool call/result as an assistant `tool_calls` message
+    # plus a matching `role: "tool"` message, correctly id-matched.
+    for round_2_body in (bodies[1], bodies[3]):
+        tool_messages = [message for message in round_2_body["messages"] if message["role"] == "assistant"
+                         and message.get("tool_calls")]
+        assert len(tool_messages) == 1
+        call_id = tool_messages[0]["tool_calls"][0]["id"]
+        tool_result = next(message for message in round_2_body["messages"] if message["role"] == "tool")
+        assert tool_result["tool_call_id"] == call_id
+        result_payload = json.loads(tool_result["content"])
+        assert result_payload["is_error"] is False
 
 
 def test_missing_api_key_falls_back_to_scripted_with_no_5xx(client, monkeypatch):
     from app.config import settings as real_settings
-    fake = real_settings().model_copy(update={"chat_brain": "claude", "anthropic_api_key": None})
+    fake = real_settings().model_copy(update={"chat_brain": "openrouter", "openrouter_api_key": None})
     monkeypatch.setattr("app.config.settings", lambda: fake)
 
     case_id = start_case(client)
@@ -127,12 +156,8 @@ def test_missing_api_key_falls_back_to_scripted_with_no_5xx(client, monkeypatch)
     assert response.json()["mode"] == "demo"
 
 
-def test_a_typed_sdk_error_falls_back_to_scripted_with_no_5xx(client, monkeypatch, claude_settings):
-    class RaisingMessages:
-        def create(self, **kwargs):
-            raise anthropic.APIConnectionError(request=httpx2.Request("POST", "https://api.anthropic.com/v1/messages"))
-
-    monkeypatch.setattr(llm_module.anthropic, "Anthropic", lambda **kwargs: SimpleNamespace(messages=RaisingMessages()))
+def test_a_5xx_falls_back_to_scripted_with_no_5xx_to_the_client(client, monkeypatch, openrouter_settings):
+    install_fake_transport(monkeypatch, [httpx.Response(503, json={"error": {"message": "provider overloaded"}})])
 
     case_id = start_case(client)
     response = send(client, case_id, MESSAGE_TEXT)
@@ -140,8 +165,31 @@ def test_a_typed_sdk_error_falls_back_to_scripted_with_no_5xx(client, monkeypatc
     assert response.json()["mode"] == "demo"
 
 
-def test_judgment_language_reply_never_reaches_the_user(client, monkeypatch, claude_settings):
-    install_fake_client(monkeypatch, [_final("Creo que esto no es creíble y hay alta probabilidad de sanción.")])
+def test_a_timeout_falls_back_to_scripted_with_no_5xx(client, monkeypatch, openrouter_settings):
+    def raising_handler(request):
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    monkeypatch.setattr(openrouter_module.httpx, "Client",
+                        lambda **kwargs: _RealClient(transport=httpx.MockTransport(raising_handler)))
+
+    case_id = start_case(client)
+    response = send(client, case_id, MESSAGE_TEXT)
+    assert response.status_code == 200
+    assert response.json()["mode"] == "demo"
+
+
+def test_invalid_json_body_falls_back_to_scripted_with_no_5xx(client, monkeypatch, openrouter_settings):
+    install_fake_transport(monkeypatch, [httpx.Response(200, content=b"not json at all")])
+
+    case_id = start_case(client)
+    response = send(client, case_id, MESSAGE_TEXT)
+    assert response.status_code == 200
+    assert response.json()["mode"] == "demo"
+
+
+def test_judgment_language_reply_never_reaches_the_user(client, monkeypatch, openrouter_settings):
+    install_fake_transport(monkeypatch, [
+        _final_response("Creo que esto no es creíble y hay alta probabilidad de sanción.")])
 
     case_id = start_case(client)
     response = send(client, case_id, MESSAGE_TEXT)

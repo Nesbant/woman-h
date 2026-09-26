@@ -1,6 +1,6 @@
 """EST-04 (issue #10): the scripted fallback brain — no LLM, deterministic rules over the message text,
-sharing every guarantee `agent/tools.py` enforces (the same tool executor a real Claude brain, EST-05, would
-call). Recognizes the five confirm-style phrases the epic names ("guárdalo", "regístralo", "anota eso",
+sharing every guarantee `agent/tools.py` enforces (the same tool executor the real OpenRouter brain, EST-05,
+uses). Recognizes the five confirm-style phrases the epic names ("guárdalo", "regístralo", "anota eso",
 "quiero dejar constancia", "eso también…"), extracts one candidate fact per narrating message using
 `sources.literal_date` for its date (never resolving a relative one), and asks a clarifying question instead
 of guessing when a confirm/discard phrase matches zero or several open candidates — never silently picking

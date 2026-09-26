@@ -26,19 +26,28 @@ class Settings(BaseSettings):
     timeline_ai_url: str | None = None
     timeline_ai_key: str | None = None
     # EST-04 (epic #5): which `AgentBrain` answers the conversation. `scripted` is the only one that exists
-    # yet (`agent/scripted.py`); `claude` is EST-05's real provider brain, added without changing this default.
-    chat_brain: Literal["scripted", "claude"] = "scripted"
-    # EST-05 (issue #11): `agent/llm.py::ClaudeBrain`. `claude-sonnet-5` is the current-generation, cost-
-    # efficient model for a conversational tool-calling workload like this one (per the Anthropic API
-    # guidance: chat/classification-shaped work rarely benefits from an Opus-tier model, and one model per
-    # deployment keeps prompt caching effective — a cascade of models forfeits cache reuse across them). The
-    # issue's `claude-opus-5` guess is not a real model id and `chat_effort` defaults to `"low"` for the same
-    # reason (chat replies over a handful of small tool calls, not long-horizon agentic work). No key means
-    # `ClaudeBrain` never even tries the network; the turn orchestrator (`agent/turn.py`) falls back to
+    # yet (`agent/scripted.py`); `openrouter` is EST-05's real provider brain, added without changing this
+    # default.
+    chat_brain: Literal["scripted", "openrouter"] = "scripted"
+    # EST-05 (issue #11, revised 2026-09-26 — user decision: OpenRouter replaces Anthropic as the provider,
+    # see `agent/openrouter.py`). OpenRouter's OpenAI-compatible Chat Completions API, one Bearer key for many
+    # providers/models. `chat_model` is the primary model; `chat_fallback_models` feeds OpenRouter's own
+    # `models` array so it tries the next one if the primary provider is unavailable. Both defaults verified
+    # on 2026-09-26 in OpenRouter's public model list as supporting `tools` + `structured_outputs`:
+    # `google/gemini-3.1-flash-lite` ($0.25/$1.50 per 1M tokens in/out) is fast and cheap enough for a
+    # chat/tool-calling workload (short replies, a handful of small tool calls a turn, never long-horizon
+    # agentic work); `deepseek/deepseek-v4-flash` ($0.047/$0.094 per 1M) is the cheaper fallback. No key means
+    # `OpenRouterBrain` never even tries the network; the turn orchestrator (`agent/turn.py`) falls back to
     # `ScriptedBrain` for that turn instead of failing the request.
-    anthropic_api_key: str | None = None
-    chat_model: str = "claude-sonnet-5"
-    chat_effort: Literal["low", "medium", "high", "xhigh", "max"] = "low"
+    openrouter_api_key: str | None = None
+    chat_model: str = "google/gemini-3.1-flash-lite"
+    chat_fallback_models: list[str] = Field(default_factory=lambda: ["deepseek/deepseek-v4-flash"])
+    openrouter_base_url: str = "https://openrouter.ai/api/v1/chat/completions"
+    openrouter_timeout_seconds: float = Field(default=30.0, ge=1.0, le=120.0)
+    # Optional identification headers OpenRouter's own docs ask for (`HTTP-Referer`/`X-Title`, used only for
+    # OpenRouter's own app-ranking pages) — never required, never sent when unset.
+    openrouter_http_referer: str | None = None
+    openrouter_x_title: str | None = None
 
     @model_validator(mode="after")
     def validate_environment(self):

@@ -2330,14 +2330,16 @@ Un hecho de la conversación (`mode: "message"`) es, para el resto del sistema, 
 `Timeline` que ya usan los hechos manuales (`mode: "person"`) y los propuestos por IA extractiva/A (§13):
 mismo modelo, misma revisión, misma regla de fuentes citadas.
 
-## Cerebros: `ScriptedBrain` y `ClaudeBrain`
+## Cerebros: `ScriptedBrain` y `OpenRouterBrain`
 
 `CHAT_BRAIN` (ver README) elige el cerebro que decide, ronda a ronda, qué herramienta llamar o qué responder:
-`scripted` (guionado, sin proveedor externo, `mode: "demo"`) o `claude` (IA real vía la API de Anthropic,
-`mode: "ai"`). Con `claude`, cada mensaje del chat viaja a Anthropic; si falta la clave, el proveedor falla,
-se corta por `refusal`/`max_tokens`, la salida estructurada es inválida o la respuesta usa lenguaje de
-juicio, el turno entero se reintenta con `ScriptedBrain` — la persona nunca ve un error 5xx ni un turno a
-medio guardar.
+`scripted` (guionado, sin proveedor externo, `mode: "demo"`) o `openrouter` (IA real vía OpenRouter, API
+compatible con OpenAI Chat Completions, `mode: "ai"`). Con `openrouter`, cada mensaje del chat viaja a
+OpenRouter y al proveedor del modelo elegido (`CHAT_MODEL` primario, `CHAT_FALLBACK_MODELS` de repuesto); si
+falta la clave, hay un error HTTP o timeout, se corta por límite de tokens o filtro de contenido, la salida
+estructurada es inválida o la respuesta usa lenguaje de juicio, el turno entero se reintenta con
+`ScriptedBrain` — la persona nunca ve un error 5xx ni un turno a medio guardar. (Decisión del usuario,
+2026-09-26: OpenRouter reemplaza a Anthropic como proveedor; ver `odd/tasks/conversational-vera.md`.)
 
 ## Decisión de persistencia (D1)
 

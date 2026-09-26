@@ -1,11 +1,12 @@
-"""EST-05 (issue #11): the frozen system prompt for `agent/llm.py::ClaudeBrain`.
+"""EST-05 (issue #11): the frozen system prompt for `agent/openrouter.py::OpenRouterBrain`.
 
 Kept in its own module, and never interpolated with anything (no date, no case id, no user name — see
-`agent/llm.py`'s prompt-caching note): `cache_control` on its last block caches it together with every tool
-definition (`agent/tools.py::TOOL_SCHEMAS`, which render before `system` on the wire), since neither one
-changes between requests, between turns or between cases. Everything that *does* change — the derived
-`CaseState`, which files were just attached — goes in the turn's own message instead
-(`agent/llm.py::_current_message`), exactly like the epic asks, so this text stays byte-identical forever.
+`agent/openrouter.py`'s prompt-caching note): staying byte-identical between requests, turns and cases is
+what lets an OpenAI-compatible provider's own automatic prefix caching apply to it and to every tool
+definition (`agent/tools.py::TOOL_SCHEMAS`), which render right after it on the wire. Everything that *does*
+change — the derived `CaseState`, which files were just attached — goes in the turn's own message instead
+(`agent/openrouter.py::_current_message`), exactly like the epic asks, so this text stays byte-identical
+forever.
 
 Written in Spanish: it directly shapes what VERA says to the person, the same way `agent/scripted.py`'s
 `demo_script.json` strings do."""
