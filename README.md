@@ -95,5 +95,10 @@ INSTITUTIONAL (miembros de la organización)
 
 - Institutional no puede listar, contar ni abrir registros privados; editar Private después del envío no modifica el snapshot.
 - Sesiones opacas en cookie `HttpOnly` + `SameSite=strict`, revocables; la base guarda solo su SHA-256.
-- Módulos backend: `records`, `accounts`, `files`, `overview`, `profile`, `timeline` + `timeline_ai`, `complaints`, `institutional`, `procedure`.
-- Frontend: `App.tsx` (sesión y shell), `views/` (Mi espacio, Registrar, Entender, Preparar, Compartir/Enviado, Institutional), `SourceDrawer.tsx`, `style.css` (tokens del prototipo).
+- **Backend** (`backend/app`), un módulo por responsabilidad:
+  - Privado: `records`, `record_removal` (borrar situación), `accounts`, `files` + `file_validation`, `overview`, `profile`.
+  - Cronología: `sources` (lee relatos, descripciones y PDF), `proposals` (verifica lo que propone la IA), `timeline` (HTTP: proponer, revisar, hechos propios), `timeline_ai` (adaptadores y respaldo).
+  - Borrador y envío: `draft_fields` (reglas puras de las seis secciones), `drafts` (HTTP), `submission` (único puente a Institutional).
+  - Institutional: `institutional`, `procedure`. Sesión: `auth`, `security`.
+- **Frontend** (`frontend/src`): `api/` (un módulo por recurso; las vistas no arman URLs), `hooks/` (`useResource`, `useAction`, `useFailure`), `components/` (overlays, toast, drawer de fuentes), `shell/` (sesión, barra lateral, cabecera, stepper, rutas) y `views/<vista>/` con un hook contenedor más componentes de presentación.
+- **Qué se puede editar y borrar:** situación (renombrar/eliminar; los casos ya enviados quedan en la organización), evidencia (describir/eliminar), hechos (corregir título, fecha y descripción; agregar y eliminar los propios; las propuestas de VERA se descartan), nota, borrador y perfil. El caso enviado es inmutable (SPEC §26).

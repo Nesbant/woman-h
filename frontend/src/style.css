@@ -59,7 +59,7 @@ h1, h2, h3, p { margin: 0 }
 .crumbs strong { font-weight: 600; white-space: nowrap }
 .crumbs span { color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .topbar-right { display: flex; align-items: center; gap: 10px }
-.avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--brand-wash); color: var(--brand-deep) }
+.avatar { text-decoration: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--brand-wash); color: var(--brand-deep) }
 .avatar.inst { background: var(--inst-wash); color: var(--inst) }
 .main { width: 100%; max-width: 1280px; margin: 0 auto; padding: 28px 40px 72px; display: flex; flex-direction: column; gap: 24px }
 
@@ -415,3 +415,13 @@ h1, h2, h3, p { margin: 0 }
   .login { grid-template-columns: 1fr; gap: 24px }
   .case-grid { grid-template-columns: 64px 1fr 100px 1fr }
 }
+
+/* Dialogs and destructive actions */
+.modal.modal-sm { max-width: 480px }
+.modal-head.plain { background: #fff; border-bottom: 1px solid var(--line-soft) }
+.dialog-body { padding: 18px 24px; gap: 10px; font-size: 14px; color: var(--text-2) }
+.dialog-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end }
+.btn-danger { background: #9B2C1F; color: #fff; border-color: #9B2C1F }
+.btn-danger:hover:not(:disabled) { background: #7E2217 }
+.btn-link.danger { color: #9B2C1F }
+.menu-actions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end }

@@ -3,10 +3,10 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom/vitest'
-import { ToastProvider } from '../ui'
+import { ToastProvider } from '../components/Toast'
 import { mockApi } from '../testing'
-import { Register } from './Register'
-import { Institutional } from './Institutional'
+import { Register } from './register/Register'
+import { Institutional } from './institutional/Institutional'
 import { App } from '../App'
 
 afterEach(() => { cleanup(); window.location.hash = ''; vi.restoreAllMocks(); vi.unstubAllGlobals() })

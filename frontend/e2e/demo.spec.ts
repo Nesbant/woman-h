@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 /**
  * SPEC §55 demo, end to end. Requires API + Vite running and a fresh `python -m app.seed`
- * (it submits Situación #001, so run it once per seeded database).
+ * (it submits Situación #001, so it needs it unsent).
  */
 test('Private → IA → borrador → selección → envío → Institutional', async ({ page }) => {
   await page.goto('/')
@@ -10,7 +10,7 @@ test('Private → IA → borrador → selección → envío → Institutional', 
   await expect(page.getByRole('heading', { name: 'Hola, María' })).toBeVisible()
   await expect(page.getByText('✕ No puede verlo')).toHaveCount(4)
 
-  await page.getByRole('button', { name: 'Continuar' }).first().click()
+  await page.getByRole('article', { name: 'Situación #001' }).getByRole('button', { name: 'Continuar' }).click()
   await expect(page.getByText('Fecha inconsistente')).toBeVisible()
   await page.getByRole('button', { name: /captura_01.png ↗/ }).click()
   await expect(page.getByText('Fragmento usado por VERA')).toBeVisible()
@@ -32,11 +32,14 @@ test('Private → IA → borrador → selección → envío → Institutional', 
   await expect(page.getByText('Así recibirá el caso tu organización')).toBeVisible()
   await page.getByText(/Entiendo que, al confirmar/).click()
   await page.getByRole('button', { name: 'Confirmar y enviar' }).click()
-  await expect(page.getByRole('heading', { name: 'Enviaste el caso V-004' })).toBeVisible()
+  const sent = page.getByRole('heading', { name: /Enviaste el caso V-\d{3}/ })
+  await expect(sent).toBeVisible()
+  const caseId = (await sent.innerText()).replace('Enviaste el caso ', '')
   await expect(page.getByText('✓ Coincide')).toHaveCount(2)
 
   await page.getByRole('button', { name: /Ver como la organización/ }).click()
-  await expect(page.getByRole('heading', { name: 'Caso V-004' })).toBeVisible()
+  await page.locator('.case-row', { hasText: caseId }).click()
+  await expect(page.getByRole('heading', { name: `Caso ${caseId}` })).toBeVisible()
   await expect(page.getByText('captura_02.png')).toHaveCount(0)
   await page.getByRole('button', { name: 'Asignarme' }).click()
   await expect(page.getByText('Lucía R. (tú)')).toBeVisible()
