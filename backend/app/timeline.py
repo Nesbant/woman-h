@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from .accounts import AccountInput, owned_account
+from .agent.events import CONVERSATION_MODES
 from .config import settings
 from .db import get_db
 from .files import owned_file
@@ -112,8 +113,11 @@ def new_event(proposal, mode):
 
 
 def merge_proposals(row, proposed, mode):
-    """Keeps everything the person reviewed; adds proposals whose sources are not already covered."""
-    kept = [deepcopy(event) for event in row.events if event['reviewed']] if row else []
+    """Keeps everything the person reviewed, plus their own manual and conversation-origin candidates even
+    when not yet reviewed (MUST FIX, epic #5 / issue #8: reprocessing must never drop what the person
+    contributed themselves); adds proposals whose sources are not already covered."""
+    kept = [deepcopy(event) for event in row.events
+            if event['reviewed'] or event.get('mode') in CONVERSATION_MODES] if row else []
     covered = {source['id'] for event in kept for source in event_sources(event)}
     return kept + [new_event(p, mode) for p in proposed if not covered & {s['id'] for s in p['sources']}]
 

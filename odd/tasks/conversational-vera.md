@@ -27,7 +27,7 @@ Runners: `backend/.venv/bin/python -m pytest -q` (SQLite; PG via `TEST_DATABASE_
 ## Tasks
 - [x] EST-00 (#6) Contract: Pydantic models, 5 JSON examples, 4 stub endpoints behind session, `api/chat.ts`, types, contract test
 - [x] EST-01 (#7) Persistence: `conversation_messages`, `conversation_states`, migration 0009, real start/get, PRIVATE_TABLES
-- [ ] EST-02 (#8) Typed event ⇄ timeline dict, origin, `message` source, `merge_proposals` keeps conversation events
+- [x] EST-02 (#8) Typed event ⇄ timeline dict, origin, `message` source, `merge_proposals` keeps conversation events
 - [ ] EST-03 (#9) Validated tool executor (6 tools, strict schemas) + `state.build_case_state`
 - [ ] EST-04 (#10) Turn orchestrator + ScriptedBrain, real messages/state endpoints, idempotency, 409
 - [ ] EST-05 (#11) Claude brain (anthropic SDK, strict tools, caching, structured output, fallback to scripted)
@@ -51,5 +51,21 @@ Runners: `backend/.venv/bin/python -m pytest -q` (SQLite; PG via `TEST_DATABASE_
   check` clean on both SQLite and PostgreSQL. One frozen-example assertion in `test_conversation_contract.py` updated
   (`view.messages` is now `[]` for a freshly started conversation instead of the fixture's non-empty history).
 
+- EST-02 done: `app/agent/events.py` (new) converts internal timeline dicts <-> `CaseEvent`, defaults `origin`
+  from the legacy `mode` (`person` -> `manual`, anything else -> `model_inference`, the conservative default),
+  and adds the `message` source kind with quote verification against the saved message text
+  (`message_source`/`new_message_event`). `timeline.merge_proposals` MUST FIX applied: conversation/person
+  candidates (`mode in {"person", "message"}`) now survive reprocessing even before review.
+  `submission.shared_label` adds "Relato de la persona (conversación)" for `kind='message'`; `draft_fields.
+  document_refs` needed no change (already generic over source kind). `ModelInferenceNotReviewed` guard added
+  in `events.py` so a `model_inference` event can never be exposed as accepted without having been reviewed.
+  `pytest tests/test_conversation.py tests/test_events_model.py tests/test_timeline.py tests/test_cases.py
+  tests/test_conversation_contract.py`: 56 passed. Full suite SQLite: 164 passed / 1 skipped. Full suite
+  PostgreSQL (`vera_test`): 165 passed / 0 skipped. `alembic check` clean on both (no migration changes in
+  EST-02). No contract (`agent/contracts.py`) changes. Existing timeline/draft/submission tests pass unchanged.
+
 ## Next step
-EST-02 on `feat/conversation-core-esteban` (stacked on the contract branch until PR merges).
+EST-03 (#9): validated tool executor (6 tools, strict schemas) + `agent/state.py::build_case_state` — this is
+also where `GET .../conversation/state` and the `case_state` embedded in `GET .../conversation` stop being
+EST-00's frozen example and start reflecting the real `Timeline`/`RecordFile`/`conversation_states` data via
+`agent/events.py`'s conversion helpers.
