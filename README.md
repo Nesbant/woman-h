@@ -34,14 +34,17 @@ En otra terminal: `cd frontend && npm ci && npm run dev`, y abrir **http://local
 
 ### Demo (≈2 minutos)
 
-1. Entrar como `ana@example.test` → **Mis registros** → *Situación #001* (relato, `captura_01.png`, `correo_01.pdf`, `captura_02.png`).
-2. **Entender lo ocurrido** → *Proponer cronología*: 4 eventos con fuentes y avisos (fecha inconsistente, posible relación, evidencia no vinculada).
-3. Ver una fuente, corregir/aceptar eventos y **confirmar la cronología**.
-4. **Preparar reporte**: seis secciones; lo faltante queda marcado, nunca inventado.
-5. **Revisar y compartir**: marcar/desmarcar qué se envía → *Revisar lo que verá la organización* → *Confirmar y enviar* → `V-001`.
-6. Cerrar sesión, entrar como `revisora@example.test` → **VERA Institutional**: lista, detalle, responsable, estado y checklist del procedimiento.
+Diseño: basado en `VERA Prototipo.html`. En la pantalla de acceso, **Entrar como persona** abre la cuenta de María X. (solo con `DEMO_ENABLED=true`).
 
-Pruebas: `cd backend && ../.venv/bin/python -m pytest -q` y `cd frontend && npm test && npm run build`. Con `TEST_DATABASE_URL` (base terminada en `_test`) las pruebas corren sobre PostgreSQL; si no, sobre SQLite temporal.
+1. **Mi espacio**: *Situación #001* (relato, `captura_01.png`, `correo_01.pdf`, `captura_02.png` y una nota privada). → *Continuar*.
+2. **Entender**: VERA propone 3 eventos con su fragmento de fuente y 3 avisos (fecha inconsistente, posible relación, evidencia no vinculada). Abre una fuente, confirma o corrige, *Usar 16 sep*.
+3. **Preparar reporte**: seis secciones; la identidad detectada queda *pendiente* hasta que la confirmes (sin confirmar no se comparte); lo que falta queda a la vista.
+4. **Revisar y compartir**: marca qué se envía y qué sigue privado → vista previa exacta → casilla de confirmación → *Confirmar y enviar* → **V-004**.
+5. *Ver como la organización (demo)*: Lucía R. en **VERA Institutional** de Empresa Andina S.A.C. (V-001…V-003 ya existían): asignarse, estado, checklist Pendiente/En curso/Completado.
+
+Para repetir la demo desde cero: `alembic downgrade base && alembic upgrade head && python -m app.seed`.
+
+Pruebas: `cd backend && ../.venv/bin/python -m pytest -q` y `cd frontend && npm test && npm run build`. Recorrido completo en navegador: `npx playwright test` (con API, Vite y una carga ficticia recién hecha). Con `TEST_DATABASE_URL` (base terminada en `_test`) las pruebas corren sobre PostgreSQL; si no, sobre SQLite temporal.
 
 ## Variables necesarias
 
@@ -65,13 +68,13 @@ Pruebas: `cd backend && ../.venv/bin/python -m pytest -q` y `cd frontend && npm 
 
 Contraseña: el valor de `DEMO_PASSWORD` (ejemplo: `Vera-Ficticia-2026!`). Todos los datos son ficticios.
 
-| Correo | Acceso institucional |
+| Correo | Rol |
 | --- | --- |
-| ana@example.test | Ninguno · tiene la *Situación #001* |
-| bea@example.test | Ninguno |
-| revisora@example.test | Revisión en Institución Aurora |
-| admin@example.test | Administración en Institución Aurora |
-| otra@example.test | Revisión en Institución Brisa |
+| maria@example.test | Persona de la demo · *Situación #001* · perfil de Empresa Andina S.A.C. |
+| lucia@example.test | Revisión en Empresa Andina S.A.C. (la organización de la demo) |
+| andrea@example.test / carlos@example.test | Revisión / administración en Empresa Andina S.A.C. |
+| ana@example.test, bea@example.test | Personas sin organización (pruebas de aislamiento) |
+| revisora@example.test, admin@example.test, otra@example.test | Institución Aurora / Brisa (pruebas de aislamiento) |
 
 ## Arquitectura general
 
@@ -92,4 +95,5 @@ INSTITUTIONAL (miembros de la organización)
 
 - Institutional no puede listar, contar ni abrir registros privados; editar Private después del envío no modifica el snapshot.
 - Sesiones opacas en cookie `HttpOnly` + `SameSite=strict`, revocables; la base guarda solo su SHA-256.
-- Módulos backend: `records`, `accounts`, `files`, `timeline` + `timeline_ai`, `complaints`, `institutional`, `procedure`.
+- Módulos backend: `records`, `accounts`, `files`, `overview`, `profile`, `timeline` + `timeline_ai`, `complaints`, `institutional`, `procedure`.
+- Frontend: `App.tsx` (sesión y shell), `views/` (Mi espacio, Registrar, Entender, Preparar, Compartir/Enviado, Institutional), `SourceDrawer.tsx`, `style.css` (tokens del prototipo).

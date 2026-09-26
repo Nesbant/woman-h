@@ -1,43 +1,57 @@
 """Synthetic demo evidence generated at seed time, so no binary fixtures live in the repository."""
 from io import BytesIO
+import unicodedata
 from PIL import Image, ImageDraw, ImageFont
 
-RELATO = ("A mediados de septiembre de 2026 tuve una reunión presencial a solas con mi supervisor, Julio Ramírez, "
-          "en la sala 3. Durante la reunión hizo comentarios sobre mi apariencia que me incomodaron y me pidió que "
-          "lo acompañara a cenar. Le dije que no. El martes 15 me escribió por WhatsApp de noche insistiendo. "
-          "Unos días después me cambiaron el turno sin explicación. Desde entonces me siento nerviosa al ir a la oficina.")
-CAPTURA_01 = ("Captura de WhatsApp de Julio Ramírez. Mensaje recibido el 16/09/2026 a las 22:43: "
-              "«¿Ya pensaste lo de la cena? No me gusta que me digan que no.»")
-CAPTURA_02 = "Foto de la sala 3, donde ocurrió la reunión."
+RELATO = ("A mediados de septiembre tuve una reunión con mi supervisor. Me hizo un comentario que me incomodó. "
+          "El martes 15 por la noche recibí mensajes suyos fuera del horario laboral y luego un correo sobre mi evaluación.")
+NOTA = "Recordar preguntar a Lucía si vio algo en la reunión."
+CAPTURA_01 = ("CAPTURA SINTÉTICA · Mensajería. Miércoles 16/09/2026.\n"
+              "22:43 — Juan X.: «¿Sigues despierta? Quería conversar sobre lo de hoy.»\n"
+              "22:47 — Juan X.: «Mañana lo vemos en la oficina.»")
+CAPTURA_02 = ("CAPTURA SINTÉTICA · Grupo del área. Jueves 18/09/2026.\n"
+              "Conversación grupal sobre turnos. No menciona directamente los hechos registrados.")
 CORREO_LINES = [
-    "Correo electrónico exportado a PDF · DATOS FICTICIOS",
-    "De: Julio Ramírez <jramirez@aurora.example>",
-    "Para: Ana Demo <ana@example.test>",
+    "CORREO SINTÉTICO",
+    "De: Juan X.",
+    "Para: María X.",
     "Fecha: 17/09/2026 09:12",
-    "Asunto: Cambio de turno",
-    "A partir de la próxima semana pasas al turno de noche.",
-    "Como conversamos en la reunión de la semana pasada, espero que reconsideres tu actitud.",
-    "Saludos, Julio",
+    "Asunto: Seguimiento de evaluación",
+    "Como conversamos esta semana, revisaremos algunos puntos de tu evaluación de desempeño.",
+    "Te escribo para coordinar.",
 ]
+
+FONTS = ("DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "Arial.ttf", "arial.ttf")
 
 
 def _font(size):
-    try:
-        return ImageFont.load_default(size=size)
-    except TypeError:
-        return ImageFont.load_default()
+    for name in FONTS:
+        try:
+            return ImageFont.truetype(name, size)
+        except OSError:
+            continue
+    return None
+
+
+def _text(draw, xy, text, fill, size):
+    font = _font(size)
+    if font is None:
+        # Bitmap fallback has no accents: draw a plain-ASCII version instead of broken glyphs.
+        text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+        font = ImageFont.load_default()
+    draw.text(xy, text, fill=fill, font=font)
 
 
 def chat_png() -> bytes:
     image = Image.new("RGB", (540, 380), "#ECE5DD")
     draw = ImageDraw.Draw(image)
     draw.rectangle((0, 0, 540, 56), fill="#075E54")
-    draw.text((20, 16), "Julio Ramírez (ficticio)", fill="white", font=_font(20))
+    _text(draw, (20, 16), "Juan X. (ficticio)", "white", 20)
     draw.rounded_rectangle((20, 90, 470, 200), radius=12, fill="white")
-    draw.text((36, 104), "¿Ya pensaste lo de la cena?", fill="#111", font=_font(18))
-    draw.text((36, 134), "No me gusta que me digan que no.", fill="#111", font=_font(18))
-    draw.text((380, 172), "16/09 22:43", fill="#667", font=_font(14))
-    draw.text((20, 340), "Captura sintética para demostración", fill="#667", font=_font(14))
+    _text(draw, (36, 104), "¿Sigues despierta? Quería conversar", "#111", 18)
+    _text(draw, (36, 134), "sobre lo de hoy.", "#111", 18)
+    _text(draw, (380, 172), "16/09 22:43", "#667", 14)
+    _text(draw, (20, 340), "Captura sintética para demostración", "#667", 14)
     output = BytesIO()
     image.save(output, format="PNG")
     return output.getvalue()
@@ -48,7 +62,7 @@ def room_png() -> bytes:
     draw = ImageDraw.Draw(image)
     draw.rectangle((60, 180, 480, 230), fill="#8A6F4E")
     draw.rectangle((40, 60, 200, 150), outline="#445", width=4)
-    draw.text((200, 290), "Sala 3 · imagen sintética", fill="#334", font=_font(18))
+    _text(draw, (150, 290), "Grupo del área · captura sintética", "#334", 18)
     output = BytesIO()
     image.save(output, format="PNG")
     return output.getvalue()
@@ -80,3 +94,8 @@ def text_pdf(lines: list[str]) -> bytes:
         output += b"%010d 00000 n \n" % offset
     output += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref)
     return bytes(output)
+
+
+def placeholder_file(label: str) -> bytes:
+    """Tiny synthetic attachment for historical demo cases."""
+    return text_pdf([f"ARCHIVO SINTÉTICO · {label}", "Contenido de demostración sin datos reales."])

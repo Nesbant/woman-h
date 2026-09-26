@@ -25,7 +25,7 @@ from sqlalchemy import delete
 from app.db import SessionLocal, engine
 from app.main import app
 from app.models import (Membership, Session, User, Institution, PrivateRecord, Account, RecordFile, FileAccount,
-                        StartEntry, Timeline, ComplaintDraft, InstitutionalCase, CaseFile)
+                        StartEntry, Timeline, ComplaintDraft, InstitutionalCase, CaseFile, Profile, RecordSubmission)
 from app.seed import seed
 
 HEADERS = {"Origin": "http://localhost:5173", "X-VERA-Request": "1"}
@@ -45,7 +45,7 @@ def schema():
 @pytest.fixture(autouse=True)
 def data(schema):
     with SessionLocal.begin() as db:
-        for model in (CaseFile, InstitutionalCase, ComplaintDraft, Timeline, StartEntry, FileAccount, RecordFile, Account, PrivateRecord, Session, Membership, User, Institution):
+        for model in (RecordSubmission, Profile, CaseFile, InstitutionalCase, ComplaintDraft, Timeline, StartEntry, FileAccount, RecordFile, Account, PrivateRecord, Session, Membership, User, Institution):
             db.execute(delete(model))
     seed()
 

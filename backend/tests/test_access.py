@@ -5,7 +5,7 @@ from app.config import Settings
 from app.db import SessionLocal
 from app.models import Membership, Session, User
 from app.security import COOKIE, token_hash
-from app.seed import demo_id, seed
+from app.seed import DEMO_USERS, demo_id, seed
 from conftest import login
 
 ANA = demo_id("ana@example.test")
@@ -116,7 +116,7 @@ def test_seed_is_idempotent_and_guarded(client, monkeypatch):
         original = db.get(User, ANA).password_hash
     seed()
     with SessionLocal() as db:
-        assert db.scalar(select(func.count()).select_from(User)) == 5
+        assert db.scalar(select(func.count()).select_from(User)) == len(DEMO_USERS)
         assert db.get(User, ANA).password_hash == original
     from app.config import settings
     monkeypatch.setattr(settings(), "demo_enabled", False)

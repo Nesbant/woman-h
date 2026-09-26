@@ -7,6 +7,8 @@ from app.models import CaseFile, InstitutionalCase, RecordFile
 from app.seed import demo_id
 from conftest import login
 
+MARIA = "maria@example.test"
+
 AURORA = demo_id("Institución Aurora · ficticia")
 BRISA = demo_id("Institución Brisa · ficticia")
 CONTENT = ("description", "date_kind", "event_date", "approximate_date")
@@ -38,7 +40,7 @@ def submit(client, record, draft, event_ids, file_ids, institution=AURORA):
 
 @pytest.fixture
 def submitted(client, demo_record):
-    login(client)
+    login(client, MARIA)
     draft = reviewed_draft(client, demo_record)
     files = files_by_name(client, demo_record)
     events = [fact["event_id"] for fact in draft["fields"]["facts"]["events"]][:3]
@@ -48,40 +50,67 @@ def submitted(client, demo_record):
     return {"record": demo_record, "draft": draft, "files": files, "events": events, "case": response.json()}
 
 
-def test_draft_requires_confirmed_timeline_and_never_invents_missing_fields(client, demo_record):
-    login(client)
-    blocked = client.post(f"/api/records/{demo_record}/complaint/generate", json={"revision": 0})
-    assert blocked.status_code == 422
-    draft = reviewed_draft(client, demo_record)
+def test_draft_uses_only_accepted_events_profile_and_pending_detection(client, demo_record):
+    login(client, MARIA)
+    state = client.post(f"/api/records/{demo_record}/timeline/analyze", json={"revision": 0}).json()
+    first = state["events"][0]
+    state = client.put(f"/api/records/{demo_record}/timeline/events/{first['id']}", json={
+        **{key: first[key] for key in CONTENT}, "revision": state["revision"], "status": "accepted"}).json()
+    # No explicit timeline confirmation is required; pending events simply stay out of the draft.
+    draft = client.post(f"/api/records/{demo_record}/complaint/generate", json={"revision": state["revision"]}).json()["draft"]
     fields = draft["fields"]
-    assert fields["affected"]["name"] == {"value": "Ana Demo", "origin": "profile"}
-    assert fields["affected"]["position"]["value"] is None
-    assert all(fields["respondent"][key]["value"] is None for key in ("name", "position", "area", "relationship"))
-    assert fields["respondent"]["suggestions"] == ["Julio Ramírez (supervisor)"]
+    assert [fact["event_id"] for fact in fields["facts"]["events"]] == [first["id"]]
+    assert fields["facts"]["events"][0]["title"] == "Reunión presencial con el supervisor"
+    assert fields["affected"]["name"] == {"value": "María X.", "origin": "profile"}
+    assert fields["affected"]["document"] == {"value": "DNI •••• 4821", "origin": "profile"}
+    assert fields["respondent"]["name"] == {"value": "Juan X.", "origin": "detected"}
+    assert fields["respondent_confirmed"] is False
+    assert fields["respondent_detection"]["found_in"][0] == "tu relato"
     assert fields["protection_measures"] == {"selected": [], "other": None}
-    assert len(fields["facts"]["events"]) == 4
-    assert "respondent.name" in draft["missing"] and "protection_measures" in draft["missing"]
+    keys = {item["key"] for item in draft["pending"]}
+    assert {"respondent", "place", "events", f"date.{first['id']}"} <= keys
     assert all(draft["source_map"][f"facts.{fact['event_id']}"] for fact in fields["facts"]["events"])
 
 
+def test_unconfirmed_identity_never_reaches_the_snapshot(client, demo_record):
+    login(client, MARIA)
+    draft = reviewed_draft(client, demo_record)
+    events = [fact["event_id"] for fact in draft["fields"]["facts"]["events"]]
+    assert submit(client, demo_record, draft, events, []).status_code == 201
+    confirmed = client.post(f"/api/records/{demo_record}/complaint/confirm-respondent", json={"revision": draft["revision"]}).json()["draft"]
+    assert confirmed["fields"]["respondent_confirmed"] is True and confirmed["reviewed"] is False
+    confirmed = client.post(f"/api/records/{demo_record}/complaint/review", json={"revision": confirmed["revision"]}).json()["draft"]
+    assert submit(client, demo_record, confirmed, events, []).status_code == 201
+    client.post("/api/auth/logout")
+    login(client, "revisora@example.test")
+    first = client.get(f"/api/institutions/{AURORA}/cases/V-001").json()["snapshot"]
+    second = client.get(f"/api/institutions/{AURORA}/cases/V-002").json()["snapshot"]
+    assert first["respondent_confirmed"] is False and first["respondent"]["name"]["value"] is None
+    assert "Juan X." not in str(first["respondent"])
+    assert second["respondent"]["name"]["value"] == "Juan X." and second["respondent"]["position"]["value"] == "Supervisor"
+
+
 def test_person_edits_draft_and_edit_resets_review(client, demo_record):
-    login(client)
+    login(client, MARIA)
     draft = reviewed_draft(client, demo_record)
     fact = draft["fields"]["facts"]["events"][0]
-    body = {"revision": draft["revision"], "affected": {"position": {"value": "Analista"}},
-            "respondent": {"name": {"value": "Julio Ramírez"}, "position": {"value": "Supervisor"}},
-            "reporter_same_as_affected": True, "reporter_name": {"value": "Ana Demo"},
-            "facts": [{"event_id": fact["event_id"], "description": "Reunión en la sala 3 (corregido)"}],
-            "consequences": {"value": None}, "measures": ["no_contact_order"], "measures_other": None}
+    body = {"revision": draft["revision"], "affected": {"position": {"value": "Analista senior"}},
+            "respondent": {"name": {"value": "Juan Xavier"}, "position": {"value": "Supervisor"}},
+            "reporter_same_as_affected": True, "reporter_name": {"value": "María X."},
+            "facts": [{"event_id": fact["event_id"], "description": "Reunión con el supervisor (corregido)"}],
+            "consequences": {"value": None}, "measures": ["no_contact", "reporting_line"], "measures_other": None}
     response = client.put(f"/api/records/{demo_record}/complaint", json=body)
     assert response.status_code == 200, response.text
     edited = response.json()["draft"]
     assert edited["reviewed"] is False and edited["revision"] == draft["revision"] + 1
-    assert edited["fields"]["respondent"]["name"] == {"value": "Julio Ramírez", "origin": "person"}
+    assert edited["fields"]["respondent"]["name"] == {"value": "Juan Xavier", "origin": "person"}
+    assert edited["fields"]["respondent_confirmed"] is True  # typed by the person
     assert edited["fields"]["affected"]["name"]["origin"] == "profile"
     assert edited["fields"]["facts"]["events"][0]["edited"] is True
     unknown = {**body, "revision": edited["revision"], "facts": [{"event_id": "no-existe", "description": "x"}]}
     assert client.put(f"/api/records/{demo_record}/complaint", json=unknown).status_code == 422
+    invalid = {**body, "revision": edited["revision"], "measures": ["despido"]}
+    assert client.put(f"/api/records/{demo_record}/complaint", json=invalid).status_code == 422
     stale = client.post(f"/api/records/{demo_record}/submit", json={
         "draft_revision": edited["revision"], "event_ids": [fact["event_id"]], "file_ids": [], "institution_id": AURORA})
     assert stale.status_code == 422  # edits must be reviewed again before sending
@@ -91,7 +120,8 @@ def test_submit_creates_case_with_only_selected_items_and_identical_hashes(clien
     case = submitted["case"]
     assert case["case_id"] == "V-001" and case["shared"] == {"events": 3, "files": 2}
     with SessionLocal() as db:
-        row = db.scalar(select(InstitutionalCase).where(InstitutionalCase.case_id == "V-001"))
+        row = db.scalar(select(InstitutionalCase).where(InstitutionalCase.case_id == "V-001",
+                                                        InstitutionalCase.institution_id == AURORA))
         copies = db.scalars(select(CaseFile).where(CaseFile.case_id == row.id)).all()
         originals = {f.id: f for f in db.scalars(select(RecordFile))}
         assert {c.filename for c in copies} == {"captura_01.png", "correo_01.pdf"}
@@ -102,12 +132,12 @@ def test_submit_creates_case_with_only_selected_items_and_identical_hashes(clien
         snapshot = row.snapshot_json
     text = str(snapshot)
     assert submitted["record"] not in text and "captura_02.png" not in text
-    assert "El martes 15" not in text  # relato stays private: no quotes travel
+    assert "El martes 15" not in text and "Lucía" not in text  # relato and private note stay private
     assert len(snapshot["facts"]["events"]) == 3 and len(snapshot["evidence"]) == 2
 
 
 def test_submit_rejects_foreign_items_and_other_owners(client, demo_record):
-    login(client)
+    login(client, MARIA)
     draft = reviewed_draft(client, demo_record)
     events = [draft["fields"]["facts"]["events"][0]["event_id"]]
     assert submit(client, demo_record, draft, ["evt-inventado"], []).status_code == 422
@@ -122,7 +152,7 @@ def test_submit_rejects_foreign_items_and_other_owners(client, demo_record):
 
 @pytest.mark.parametrize("email", ["revisora@example.test", "admin@example.test"])
 def test_institutional_cannot_list_count_or_open_private(client, demo_record, email):
-    login(client)
+    login(client, MARIA)
     reviewed_draft(client, demo_record)  # private draft exists, nothing submitted
     client.post("/api/auth/logout")
     login(client, email)
@@ -156,13 +186,16 @@ def test_case_management_never_changes_snapshot(client, submitted):
     reviewer = login(client, "revisora@example.test")
     base = f"/api/institutions/{AURORA}/cases/V-001"
     before = client.get(base).json()["snapshot"]
-    assert client.put(f"{base}/assignee", json={"assignee_id": reviewer["id"]}).json()["assignee"]["name"] == "Lucía Demo"
+    assigned = client.put(f"{base}/assignee", json={"assignee_id": reviewer["id"]}).json()
+    assert assigned["assignee"]["name"] == "Lucía Demo" and assigned["status"] == "in_review"  # taking it starts review
     assert client.put(f"{base}/assignee", json={"assignee_id": demo_id("ana@example.test")}).status_code == 422
     assert client.put(f"{base}/status", json={"status": "in_review"}).json()["status"] == "in_review"
     assert client.put(f"{base}/status", json={"status": "culpable"}).status_code == 422
-    step = client.put(f"{base}/procedure/rights_info", json={"done": True}).json()["procedure"][0]
-    assert step["done"] is True and step["done_by"]["name"] == "Lucía Demo"
-    assert client.put(f"{base}/procedure/sancion", json={"done": True}).status_code == 422
+    for status in ("in_progress", "done"):
+        step = client.put(f"{base}/procedure/rights_info", json={"status": status}).json()["procedure"][0]
+        assert step["status"] == status and step["updated_by"]["name"] == "Lucía Demo"
+    assert client.put(f"{base}/procedure/rights_info", json={"status": "culpable"}).status_code == 422
+    assert client.put(f"{base}/procedure/sancion", json={"status": "done"}).status_code == 422
     assert client.get(base).json()["snapshot"] == before
 
 
@@ -171,7 +204,7 @@ def test_editing_private_after_submit_does_not_modify_snapshot(client, submitted
     login(client, "revisora@example.test")
     before = client.get(f"/api/institutions/{AURORA}/cases/V-001").json()["snapshot"]
     client.post("/api/auth/logout")
-    login(client)
+    login(client, MARIA)
     client.put(f"/api/records/{record}", json={"title": "Cambiado", "description": "Texto privado nuevo"})
     body = {"revision": draft["revision"], "affected": {"name": {"value": "Otro nombre"}}, "respondent": {},
             "reporter_same_as_affected": True, "reporter_name": {"value": "Ana Demo"}, "facts": [],
@@ -188,7 +221,7 @@ def test_editing_private_after_submit_does_not_modify_snapshot(client, submitted
 
 
 def test_case_numbers_are_sequential_per_institution(client, demo_record):
-    login(client)
+    login(client, MARIA)
     draft = reviewed_draft(client, demo_record)
     events = [draft["fields"]["facts"]["events"][0]["event_id"]]
     assert submit(client, demo_record, draft, events, []).json()["case_id"] == "V-001"
@@ -197,7 +230,7 @@ def test_case_numbers_are_sequential_per_institution(client, demo_record):
 
 
 def test_submit_rejects_draft_made_from_an_outdated_timeline(client, demo_record):
-    login(client)
+    login(client, MARIA)
     draft = reviewed_draft(client, demo_record)
     timeline = client.get(f"/api/records/{demo_record}/timeline").json()
     event = timeline["events"][0]
@@ -208,4 +241,4 @@ def test_submit_rejects_draft_made_from_an_outdated_timeline(client, demo_record
     response = submit(client, demo_record, draft, [event["id"]], [])
     assert response.status_code == 409
     with SessionLocal() as db:
-        assert db.scalar(select(InstitutionalCase)) is None
+        assert db.scalar(select(InstitutionalCase).where(InstitutionalCase.institution_id == AURORA)) is None

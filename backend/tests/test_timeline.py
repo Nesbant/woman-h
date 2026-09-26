@@ -3,6 +3,8 @@ from app.main import app
 from app.timeline_ai import get_timeline_adapter
 from conftest import login
 
+MARIA = "maria@example.test"
+
 
 class Stub:
     mode = "ai"
@@ -38,24 +40,57 @@ def own_record(client, text):
 
 
 def test_demo_fixture_produces_sourced_events_and_review_items(client, demo_record):
-    login(client)
+    login(client, MARIA)
     state = analyze(client, demo_record)
     assert state["mode"] == "fixture"
     events = state["events"]
-    assert len(events) == 4
+    assert [event["title"] for event in events] == ["Reunión presencial con el supervisor",
+                                                     "Mensajes recibidos fuera del horario laboral",
+                                                     "Correo sobre la evaluación de desempeño"]
     for event in events:
         assert event["status"] == "proposed" and event["needs_review"] and not event["reviewed"]
         assert event["sources"] and event["source"] == event["sources"][0]
         quotes = " ".join(" ".join(source["quote"].split()) for source in event["sources"])
         assert all(" ".join(quote.split()) in quotes for quote in event["support_quotes"])
-    by_date = {event["event_date"]: event for event in events if event["date_kind"] == "exact"}
-    assert set(by_date) == {"2026-09-16", "2026-09-17"}
-    assert by_date["2026-09-16"]["source"]["label"].startswith("captura_01.png")
-    assert by_date["2026-09-17"]["source"]["label"] == "correo_01.pdf"
+    meeting, messages, email = events
+    assert meeting["date_kind"] == "approximate" and meeting["event_time"] is None
+    assert (messages["event_date"], messages["event_time"]) == ("2026-09-16", "22:43")
+    assert (email["event_date"], email["event_time"]) == ("2026-09-17", "09:12")
+    assert messages["source"]["label"].startswith("captura_01.png")
+    assert email["source"]["label"] == "correo_01.pdf"
     kinds = {item["kind"]: item for item in state["review_items"]}
     assert set(kinds) == {"date_inconsistency", "possible_relation", "unlinked_evidence"}
+    assert kinds["date_inconsistency"]["event_ids"] == [messages["id"]]
+    assert kinds["date_inconsistency"]["action_label"] == "Usar 16 sep"
+    assert set(kinds["possible_relation"]["event_ids"]) == {meeting["id"], email["id"]}
     assert "captura_02.png" in kinds["unlinked_evidence"]["message"]
     assert all(item["status"] == "open" for item in state["review_items"])
+
+
+def test_resolving_a_notice_annotates_its_events_without_changing_revision(client, demo_record):
+    login(client, MARIA)
+    state = analyze(client, demo_record)
+    item = next(item for item in state["review_items"] if item["kind"] == "date_inconsistency")
+    resolved = client.put(f"/api/records/{demo_record}/timeline/review-items/{item['id']}",
+                          json={"revision": state["revision"], "status": "resolved"}).json()
+    assert resolved["revision"] == state["revision"]
+    noted = next(event for event in resolved["events"] if event["id"] == item["event_ids"][0])
+    assert noted["note"] == "Fecha conservada según captura_01.png"
+    reopened = client.put(f"/api/records/{demo_record}/timeline/review-items/{item['id']}",
+                          json={"revision": state["revision"], "status": "open"}).json()
+    assert "note" not in next(event for event in reopened["events"] if event["id"] == item["event_ids"][0])
+
+
+def test_invented_clock_times_are_dropped(client, adapter):
+    login(client)
+    record = own_record(client, "El 03/09/2026 a las 10:15 hubo una reunión en la oficina.")
+    adapter["value"] = Stub({"events": [
+        {"title": "Reunión", "description": "Reunión en la oficina", "date_kind": "exact", "event_date": "2026-09-03",
+         "event_time": "10:15", "support_quotes": ["El 03/09/2026 a las 10:15 hubo una reunión"]},
+        {"title": "Otra", "description": "Reunión inventada", "date_kind": "exact", "event_date": "2026-09-03",
+         "event_time": "23:59", "support_quotes": ["hubo una reunión en la oficina"]}]})
+    state = analyze(client, record)
+    assert [event["event_time"] for event in state["events"]] == ["10:15", None]
 
 
 def test_unsupported_quotes_dates_and_judgements_are_never_stored(client, adapter):
@@ -107,7 +142,7 @@ def test_legacy_selected_ids_contract_still_supported(client, adapter, monkeypat
 
 
 def test_review_item_status_survives_reanalysis_without_changing_revision(client, demo_record):
-    login(client)
+    login(client, MARIA)
     state = analyze(client, demo_record)
     item = next(item for item in state["review_items"] if item["kind"] == "date_inconsistency")
     response = client.put(f"/api/records/{demo_record}/timeline/review-items/{item['id']}",
@@ -119,7 +154,7 @@ def test_review_item_status_survives_reanalysis_without_changing_revision(client
 
 
 def test_multi_source_event_exposes_each_source(client, demo_record):
-    login(client)
+    login(client, MARIA)
     state = analyze(client, demo_record)
     event = next(event for event in state["events"] if event["event_date"] == "2026-09-16")
     source = event["sources"][0]
@@ -151,7 +186,7 @@ def test_fixture_never_applies_to_partially_matching_real_data(client):
 def test_fixture_is_excluded_outside_demo_mode(client, demo_record, monkeypatch):
     from app.config import settings
     monkeypatch.setattr("app.timeline.settings", lambda: settings().model_copy(update={"demo_enabled": False}))
-    login(client)
+    login(client, MARIA)
     assert analyze(client, demo_record)["mode"] == "extractive"
 
 

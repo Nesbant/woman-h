@@ -2,11 +2,11 @@ from uuid import UUID
 from typing import Literal
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from .accounts import AccountInput, add_account, edit_account, owned_account
 from .db import get_db
-from .models import StartEntry, User
+from .models import PrivateRecord, StartEntry, User
 from .records import RecordInput, add_record, edit_record, owned_record
 from .security import current_user
 
@@ -33,7 +33,8 @@ def continue_from_start(data: StartInput, user: User = Depends(current_user), db
     db.execute(select(User.id).where(User.id == user.id).with_for_update()).one()
     entry = db.get(StartEntry, (user.id, str(data.entry_id)))
     if entry is None:
-        record = add_record(db, user, RecordInput(title="Mi registro", description=data.text))
+        count = db.scalar(select(func.count()).select_from(PrivateRecord).where(PrivateRecord.owner_id == user.id))
+        record = add_record(db, user, RecordInput(title=f"Situación #{count + 1:03d}", description=data.text))
         account = add_account(db, UUID(record.id), AccountInput(description=data.text, date_kind="unknown"))
         entry = StartEntry(user_id=user.id, entry_id=str(data.entry_id), record_id=record.id, account_id=account.id)
         db.add(entry)

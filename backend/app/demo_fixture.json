@@ -1,54 +1,50 @@
 {
   "events": [
     {
-      "description": "Reunión presencial a solas con el supervisor en la sala 3. La persona describe comentarios sobre su apariencia y una invitación a cenar que rechazó.",
+      "title": "Reunión presencial con el supervisor",
+      "description": "La persona describe una reunión en la que recibió un comentario que la incomodó.",
       "date_kind": "approximate",
       "event_date": null,
-      "approximate_date": "mediados de septiembre de 2026",
+      "approximate_date": "mediados de septiembre",
       "source_ids": [],
-      "support_quotes": [
-        "tuve una reunión presencial a solas con mi supervisor, Julio Ramírez, en la sala 3",
-        "hizo comentarios sobre mi apariencia que me incomodaron y me pidió que lo acompañara a cenar",
-        "Le dije que no."
-      ]
+      "support_quotes": ["A mediados de septiembre tuve una reunión con mi supervisor.", "Me hizo un comentario que me incomodó."]
     },
     {
-      "description": "Mensaje de WhatsApp recibido a las 22:43 insistiendo sobre la cena.",
+      "title": "Mensajes recibidos fuera del horario laboral",
+      "description": "Dos mensajes del supervisor recibidos por la noche, fuera del horario laboral.",
       "date_kind": "exact",
       "event_date": "2026-09-16",
+      "event_time": "22:43",
       "approximate_date": null,
       "source_ids": [],
-      "support_quotes": ["Mensaje recibido el 16/09/2026 a las 22:43", "¿Ya pensaste lo de la cena?"]
+      "support_quotes": ["Miércoles 16/09/2026.", "22:43 — Juan X.: «¿Sigues despierta?"]
     },
     {
-      "description": "Correo del supervisor que comunica un cambio al turno de noche.",
+      "title": "Correo sobre la evaluación de desempeño",
+      "description": "Correo del supervisor que propone revisar puntos de la evaluación “como conversamos esta semana”.",
       "date_kind": "exact",
       "event_date": "2026-09-17",
+      "event_time": "09:12",
       "approximate_date": null,
       "source_ids": [],
-      "support_quotes": ["Fecha: 17/09/2026 09:12", "A partir de la próxima semana pasas al turno de noche."]
-    },
-    {
-      "description": "La persona describe un cambio de turno sin explicación y nerviosismo al ir a la oficina.",
-      "date_kind": "approximate",
-      "event_date": null,
-      "approximate_date": "unos días después de la reunión",
-      "source_ids": [],
-      "support_quotes": ["Unos días después me cambiaron el turno sin explicación.", "Desde entonces me siento nerviosa al ir a la oficina."]
+      "support_quotes": ["Fecha: 17/09/2026 09:12", "Como conversamos esta semana, revisaremos algunos puntos de tu evaluación de desempeño."]
     }
   ],
   "review_items": [
     {
       "kind": "date_inconsistency",
-      "message": "El relato menciona el martes 15, pero la captura indica el miércoles 16/09/2026.",
+      "message": "El relato menciona “martes 15”, pero la captura corresponde al miércoles 16. Elige qué información conservar.",
+      "action_label": "Usar 16 sep",
+      "resolution_note": "Fecha conservada según captura_01.png",
       "source_ids": [],
-      "support_quotes": ["El martes 15 me escribió por WhatsApp de noche insistiendo.", "Mensaje recibido el 16/09/2026 a las 22:43"]
+      "support_quotes": ["El martes 15 por la noche recibí mensajes suyos fuera del horario laboral", "Miércoles 16/09/2026."]
     },
     {
       "kind": "possible_relation",
-      "message": "El correo menciona una reunión que podría ser la misma descrita en tu relato.",
+      "message": "correo_01.pdf dice “como conversamos esta semana”, lo que podría referirse a la reunión presencial.",
+      "action_label": "Relacionar",
       "source_ids": [],
-      "support_quotes": ["Como conversamos en la reunión de la semana pasada", "tuve una reunión presencial a solas con mi supervisor"]
+      "support_quotes": ["Como conversamos esta semana", "A mediados de septiembre tuve una reunión con mi supervisor."]
     }
   ]
 }

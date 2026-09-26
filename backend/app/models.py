@@ -45,8 +45,34 @@ class PrivateRecord(Base):
     title: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(30))
+    # Private scratch note. Never part of drafts, snapshots or any institutional view.
+    private_note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class Profile(Base):
+    """Data the person confirmed about themselves; used to prefill section I of drafts."""
+    __tablename__ = "profiles"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    institution_id: Mapped[str | None] = mapped_column(ForeignKey("institutions.id", ondelete="SET NULL"))
+    document: Mapped[str | None] = mapped_column(String(200))
+    contact: Mapped[str | None] = mapped_column(String(200))
+    position: Mapped[str | None] = mapped_column(String(200))
+    area: Mapped[str | None] = mapped_column(String(200))
+    relationship: Mapped[str | None] = mapped_column(String(200))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class RecordSubmission(Base):
+    """Private-side receipt of a submission. Lives with the record; institutions never read this table."""
+    __tablename__ = "record_submissions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    record_id: Mapped[str] = mapped_column(ForeignKey("private_records.id", ondelete="CASCADE"), index=True)
+    case_id: Mapped[str] = mapped_column(String(20))
+    institution_name: Mapped[str] = mapped_column(String(150))
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    summary: Mapped[dict] = mapped_column(JSON)
 
 
 class Account(Base):

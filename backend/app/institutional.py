@@ -10,12 +10,12 @@ from sqlalchemy.orm import Session
 from .db import get_db
 from .files import private_bytes
 from .models import CASE_STATUSES, InstitutionalCase, Membership, User
-from .procedure import STEPS, procedure_view
+from .procedure import STATUSES, STEPS, procedure_view
 from .security import current_user, require_membership
 from .storage import PrivateStorage, get_storage
 
 router = APIRouter(prefix="/api/institutions/{institution_id}/cases", tags=["Institutional"])
-STEP_KEYS = tuple(key for key, _, _ in STEPS)
+STEP_KEYS = tuple(key for key, _, _, _ in STEPS)
 
 
 class Assignee(BaseModel):
@@ -30,7 +30,7 @@ class Status(BaseModel):
 
 class Step(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    done: bool
+    status: Literal[STATUSES]
 
 
 def utc(value):
@@ -60,9 +60,10 @@ def member_case(db, institution_id, case_id, user, lock=False):
 def detail(db, case):
     members = db.execute(select(User.id, User.name).join(Membership, Membership.user_id == User.id)
                          .where(Membership.institution_id == case.institution_id).order_by(User.name)).all()
-    people = names(db, [case.assignee_id, *(step.get("done_by") for step in case.procedure_json.values())])
-    procedure = [{**step, "done_by": {"id": step["done_by"], "name": people.get(step["done_by"])} if step["done_by"] else None}
-                 for step in procedure_view(case.procedure_json)]
+    steps = procedure_view(case.procedure_json)
+    people = names(db, [case.assignee_id, *(step["updated_by"] for step in steps)])
+    procedure = [{**step, "updated_by": {"id": step["updated_by"], "name": people.get(step["updated_by"])} if step["updated_by"] else None}
+                 for step in steps]
     return {**summary(case, people), "snapshot": case.snapshot_json, "procedure": procedure,
             "files": [{"id": item.id, "filename": item.filename, "media_type": item.media_type, "sha256": item.sha256}
                       for item in case.files],
@@ -90,6 +91,9 @@ def assign(institution_id: UUID, case_id: str, data: Assignee, user: User = Depe
     if data.assignee_id is not None and db.get(Membership, (str(data.assignee_id), case.institution_id)) is None:
         raise HTTPException(422, "La persona responsable debe pertenecer a la organización")
     case.assignee_id = str(data.assignee_id) if data.assignee_id else None
+    if case.assignee_id and case.status == "new":
+        # Taking responsibility starts the review.
+        case.status = "in_review"
     db.commit()
     return detail(db, case)
 
@@ -108,8 +112,7 @@ def mark_step(institution_id: UUID, case_id: str, step: Literal[STEP_KEYS], data
     case = member_case(db, institution_id, case_id, user, lock=True)
     # Procedure is mutable institutional tracking; the received snapshot is never touched.
     case.procedure_json = {**case.procedure_json, step: {
-        "done": data.done, "done_at": datetime.now(timezone.utc).isoformat() if data.done else None,
-        "done_by": user.id if data.done else None}}
+        "status": data.status, "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.id}}
     db.commit()
     return detail(db, case)
 

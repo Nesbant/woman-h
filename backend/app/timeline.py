@@ -32,6 +32,7 @@ class Revision(BaseModel):
 class Review(AccountInput):
     revision: int = Field(ge=0)
     status: Literal["accepted", "discarded", "proposed"]
+    title: str | None = Field(default=None, max_length=200)
 
 
 class ItemReview(Revision):
@@ -41,6 +42,20 @@ class ItemReview(Revision):
 # Guardrail: proposals never score, judge credibility, attribute intent or suggest sanctions (SPEC §15).
 FORBIDDEN = re.compile(r"probabilidad|culpab|credib|cre[ií]ble|sanci[oó]n|despid|intenci[oó]n sexual", re.I)
 MAX_EVENTS = 12
+CONTENT = ('title', 'description', 'date_kind', 'event_date', 'approximate_date', 'event_time')
+
+
+def short_title(text):
+    text = " ".join(text.split())
+    return text if len(text) <= 80 else text[:79].rstrip() + "…"
+
+
+def checked_time(item, cited):
+    """A clock time is kept only when it is written in a cited fragment."""
+    value = item.get('event_time')
+    if type(value) is str and re.fullmatch(r"[0-2]\d:[0-5]\d", value) and any(value in s['quote'] for s in cited):
+        return value
+    return None
 
 
 def state(row, mode):
@@ -195,7 +210,12 @@ def verify(proposal, sources, strict=False):
         if not cited or (strict and missing) or type(description) is not str or not 0 < len(description.strip()) <= 2000 or FORBIDDEN.search(description):
             dropped += 1
             continue
-        events.append({"description": description.strip(), **checked_date(raw, cited), "sources": cited, "support_quotes": quotes})
+        title = raw.get('title')
+        title = title.strip() if type(title) is str and 0 < len(title.strip()) <= 200 and not FORBIDDEN.search(title) else short_title(description)
+        date_fields = checked_date(raw, cited)
+        events.append({"title": title, "description": description.strip(), **date_fields,
+                       "event_time": checked_time(raw, cited) if date_fields['date_kind'] == 'exact' else None,
+                       "sources": cited, "support_quotes": quotes})
     for raw in (proposal.get('review_items') or [])[:10]:
         if not isinstance(raw, dict) or raw.get('kind') not in ("date_inconsistency", "possible_relation"):
             continue
@@ -205,14 +225,17 @@ def verify(proposal, sources, strict=False):
             dropped += 1
             continue
         if cited and type(message) is str and 0 < len(message.strip()) <= 500 and not FORBIDDEN.search(message):
-            items.append(review_item(raw['kind'], message.strip(), [s['id'] for s in cited]))
+            label, note = raw.get('action_label'), raw.get('resolution_note')
+            items.append({**review_item(raw['kind'], message.strip(), [s['id'] for s in cited]),
+                          "action_label": label.strip() if type(label) is str and 0 < len(label.strip()) <= 40 else None,
+                          "resolution_note": note.strip() if type(note) is str and 0 < len(note.strip()) <= 200 and not FORBIDDEN.search(note) else None})
     return events, items, dropped
 
 
 def review_item(kind, message, source_ids=(), file_id=None):
     key = sha256(f"{kind}:{','.join(sorted(source_ids))}:{file_id}".encode()).hexdigest()[:32]
     return {"id": key, "kind": kind, "message": message, "source_ids": list(source_ids),
-            "file_id": file_id, "status": "open"}
+            "file_id": file_id, "status": "open", "event_ids": [], "action_label": None, "resolution_note": None}
 
 
 def event_sources(event):
@@ -254,7 +277,7 @@ def analyze(record_id: UUID, data: Revision, user: User = Depends(current_user),
     for proposal in proposed:
         if known & {source['id'] for source in proposal['sources']}:
             continue
-        original = {key: proposal[key] for key in ('description', 'date_kind', 'event_date', 'approximate_date')}
+        original = {key: proposal[key] for key in CONTENT}
         preserved.append({"id": str(uuid4()), "source": proposal['sources'][0], "sources": proposal['sources'],
                           "support_quotes": proposal['support_quotes'], "original": original, **original,
                           "status": "proposed", "reviewed": False, "edited": False, "needs_review": True, "mode": mode})
@@ -264,6 +287,10 @@ def analyze(record_id: UUID, data: Revision, user: User = Depends(current_user),
               for source in event_sources(event) if source['kind'] == 'file'}
     items += [review_item("unlinked_evidence", f"{file.filename} todavía no está asociado a ningún evento.", file_id=file.id)
               for file in files if file.id not in linked]
+    for item in items:
+        # Which events a notice is about, so the UI and resolutions can point at them.
+        item['event_ids'] = [event['id'] for event in preserved
+                             if {s['id'] for s in event_sources(event)} & set(item['source_ids'])]
     previous = {item['id']: item['status'] for item in (row.review_items or [])} if row else {}
     items = [{**item, "status": previous.get(item['id'], "open")} for item in {item['id']: item for item in items}.values()]
     now = datetime.now(timezone.utc)
@@ -285,8 +312,17 @@ def review_item_status(record_id: UUID, item_id: str, data: ItemReview, user: Us
     item = next((value for value in items if value['id'] == item_id), None)
     if item is None:
         raise HTTPException(404, "Aviso no encontrado")
-    # Atender un aviso no altera eventos: no cambia la versión ni la confirmación de la cronología.
+    # Atender un aviso no altera el contenido de los eventos: no cambia la versión de la cronología.
     item['status'] = data.status
+    if item.get('resolution_note'):
+        events = deepcopy(row.events)
+        for event in events:
+            if event['id'] in item.get('event_ids', []):
+                if data.status == 'resolved':
+                    event['note'] = item['resolution_note']
+                elif event.get('note') == item['resolution_note']:
+                    event.pop('note')
+        row.events = events
     row.review_items = items
     db.commit()
     return state(row, row.mode)
@@ -300,8 +336,14 @@ def review(record_id: UUID, event_id: UUID, data: Review, user: User = Depends(c
     if event is None:
         raise HTTPException(404, "Evento no encontrado")
     content = data.model_dump(mode='json', include={'description', 'date_kind', 'event_date', 'approximate_date'})
+    content['title'] = data.title or event.get('title') or short_title(data.description)
+    # A clock time only survives while the exact date it belongs to is unchanged.
+    content['event_time'] = event.get('event_time') if content['event_date'] == event.get('event_date') else None
     event.update(content)
-    event.update(status=data.status, reviewed=True, edited=content != event['original'])
+    original = event['original']
+    event.update(status=data.status, reviewed=True,
+                 edited=any(content[key] != original.get(key, content[key] if key in ('title', 'event_time') else None)
+                            for key in CONTENT))
     row.events = events
     row.revision += 1
     row.confirmed_revision = None

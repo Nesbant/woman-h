@@ -24,7 +24,7 @@ def test_continue_creates_record_and_account_together_without_title_or_date(clie
         record = db.get(PrivateRecord, saved['record_id'])
         account = db.get(Account, saved['account_id'])
         assert record.owner_id == owner['id'] and record.status == 'private_draft'
-        assert record.title == 'Mi registro'
+        assert record.title == 'Situación #001'
         assert record.description == account.description == data['text']
         assert account.record_id == record.id
         assert account.date_kind == 'unknown' and account.event_date is None
