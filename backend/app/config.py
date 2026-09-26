@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     timeline_ai_factory: str = "app.timeline_ai:FixtureAdapter"
     timeline_ai_url: str | None = None
     timeline_ai_key: str | None = None
+    # EST-04 (epic #5): which `AgentBrain` answers the conversation. `scripted` is the only one that exists
+    # yet (`agent/scripted.py`); `claude` is EST-05's real provider brain, added without changing this default.
+    chat_brain: Literal["scripted", "claude"] = "scripted"
 
     @model_validator(mode="after")
     def validate_environment(self):

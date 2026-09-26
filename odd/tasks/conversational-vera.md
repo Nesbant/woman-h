@@ -28,8 +28,8 @@ Runners: `backend/.venv/bin/python -m pytest -q` (SQLite; PG via `TEST_DATABASE_
 - [x] EST-00 (#6) Contract: Pydantic models, 5 JSON examples, 4 stub endpoints behind session, `api/chat.ts`, types, contract test
 - [x] EST-01 (#7) Persistence: `conversation_messages`, `conversation_states`, migration 0009, real start/get, PRIVATE_TABLES
 - [x] EST-02 (#8) Typed event ⇄ timeline dict, origin, `message` source, `merge_proposals` keeps conversation events
-- [ ] EST-03 (#9) Validated tool executor (6 tools, strict schemas) + `state.build_case_state`
-- [ ] EST-04 (#10) Turn orchestrator + ScriptedBrain, real messages/state endpoints, idempotency, 409
+- [x] EST-03 (#9) Validated tool executor (6 tools, strict schemas) + `state.build_case_state`
+- [x] EST-04 (#10) Turn orchestrator + ScriptedBrain, real messages/state endpoints, idempotency, 409
 - [ ] EST-05 (#11) Claude brain (anthropic SDK, strict tools, caching, structured output, fallback to scripted)
 - [ ] EST-06 (#12) `prepare_share_preview` never submits
 - [ ] EST-07 (#13) Seed conversation, safety tests (both brains), README/SPEC
@@ -64,8 +64,65 @@ Runners: `backend/.venv/bin/python -m pytest -q` (SQLite; PG via `TEST_DATABASE_
   PostgreSQL (`vera_test`): 165 passed / 0 skipped. `alembic check` clean on both (no migration changes in
   EST-02). No contract (`agent/contracts.py`) changes. Existing timeline/draft/submission tests pass unchanged.
 
+- EST-03 done: `agent/tools.py` (new) — six tools (`create_or_update_candidate_event`, `confirm_event`,
+  `discard_event`, `attach_evidence`, `get_case_summary`, `prepare_share_preview`) as validated functions over
+  the DB, `strict`-compatible JSON schemas (every property required, `additionalProperties: false`, optionality
+  via nullable type unions). Validation reuses `proposals.clean_text/exact_date/checked_time` and
+  `events.quote_in_message`/`message_source`; every `user_quote` must be a literal substring of the message
+  actually saved (`_require_quote`), file ownership is checked against `record_id`, and revision bumps are
+  server-side only (`_touch`, mirroring `timeline.bump`). Errors never raise past `execute`: always a
+  `ToolResult(is_error=True, ...)` with a message meant for the brain. `agent/state.py::build_case_state` (new)
+  is now the single place that derives `CaseState` from `Timeline.events` + `RecordFile` + `ConversationState`;
+  `conversation.py`'s `GET .../conversation` and `GET .../conversation/state` and the `get_case_summary` tool all
+  call it — EST-00's frozen examples are gone. `prepare_share_preview` is the EST-03 placeholder: only the
+  `open_share_preview` action from confirmed/corrected events and their linked files, no draft refresh and no
+  `InstitutionalCase` anywhere in the module (EST-06 completes the real draft refresh).
+  `pytest tests/test_agent_tools.py`: 22 passed — covers all 4 acceptance criteria (invented quote rejected,
+  `confirm_event` without a real user phrase rejected, a `file_id` from another case rejected, no tool ever
+  creates an `InstitutionalCase`) plus date/time verification, update-vs-create, review-state gating and
+  `get_case_summary`/`build_case_state` parity.
+
+- EST-04 done: `agent/turn.py` (new) — the turn orchestrator: per-case `threading.Lock` (non-blocking, 409 on a
+  second concurrent request for the same case) plus a best-effort PostgreSQL `pg_try_advisory_xact_lock` for a
+  real multi-process deployment (a no-op on SQLite, which is single-process here) → idempotency by
+  `client_message_id` (a repeated id returns the exact same persisted turn, `suggested_actions` excepted since
+  it is never persisted) → save the user message → context (`build_case_state` + last 20 messages) → the
+  chosen `AgentBrain`'s manual tool loop (at most 4 rounds, `agent/tools.py`'s validated executor) → save the
+  reply and touched event ids → `ChatTurnResponse`, committed once per turn. `agent/brain.py` (new): the
+  `AgentBrain` protocol (`next_step(RoundContext) -> BrainStep`, per-round not per-turn) and `get_brain()`,
+  factory by `settings().chat_brain` (`config.py`, new `chat_brain: Literal["scripted", "claude"] = "scripted"`
+  setting) — EST-05 adds `"claude"` without touching this shape. `agent/scripted.py` + `agent/demo_script.json`
+  (new): the deterministic fallback brain, `mode="demo"`. Recognizes the epic's five confirm phrases and four
+  discard phrases (casefolded, whitespace-squashed substring match), extracts one candidate per narrating
+  message with `sources.literal_date` (never resolving a relative date), and asks a clarifying question instead
+  of guessing when a confirm/discard phrase matches zero or 2+ open candidates. `conversation.py`'s
+  `POST .../messages` now calls `run_turn` for real (the stub echo is gone). Message length (max 4000, via the
+  existing `ChatTurnRequest` contract) and the one-turn-at-a-time lock both answer before any brain runs.
+  `pytest tests/test_conversation_turn.py`: 8 passed — covers all 4 acceptance criteria (narrating creates a
+  `message`-sourced candidate; "guárdalo" confirms it and it shows up in both the timeline and the generated
+  draft; an ambiguous "guárdalo" with two open candidates asks instead of guessing; the same
+  `client_message_id` twice returns the same turn) plus the 409 lock, the length limit, evidence attachment and
+  the share-preview action.
+
+  What I changed from the previous (uncommitted) writer's partial work: reviewed every file critically; found
+  it already correct and complete against both issues' acceptance criteria (all 30 EST-03/04 tests were already
+  passing before I touched anything). Only change made: a stale comment in `test_conversation_contract.py`
+  still said `case_state` "stays EST-00's frozen example until EST-03" even though EST-03 already replaced it —
+  fixed the comment, no behavior change. No contract (`agent/contracts.py`) changes; response shapes are
+  unchanged from EST-00's frozen contract.
+
+  Full suite SQLite: 195 passed / 1 skipped (baseline was 164 passed / 1 skipped; +31 from EST-03/EST-04's new
+  tests, no regressions). Full suite PostgreSQL (`vera_test`): not run this session — the `woman-h-db-1`
+  container is unreachable from this environment (no `docker` binary, and port 5432 refuses connections), so
+  this verification step is honestly reported as not executed rather than assumed passing. Manual curl smoke
+  against uvicorn (SQLite temp DB, `CHAT_BRAIN=scripted`, seeded `maria@example.test`): started a conversation,
+  narrated a fact (created a `candidate` event sourced from the message), said "Guárdalo, quiero dejar
+  constancia de eso." (event became `confirmed` in `case_state`), and verified the same event shows
+  `status=accepted, reviewed=true` on the plain `GET .../timeline` endpoint. Server stopped afterward.
+
 ## Next step
-EST-03 (#9): validated tool executor (6 tools, strict schemas) + `agent/state.py::build_case_state` — this is
-also where `GET .../conversation/state` and the `case_state` embedded in `GET .../conversation` stop being
-EST-00's frozen example and start reflecting the real `Timeline`/`RecordFile`/`conversation_states` data via
-`agent/events.py`'s conversion helpers.
+EST-05 (#11): Claude brain (anthropic SDK, strict tools, prompt caching, structured output, automatic fallback
+to `ScriptedBrain` on any typed SDK error) — `get_brain()` already has the `"claude"` branch reserved in its
+factory signature, `agent/tools.py`'s `TOOL_SCHEMAS` are already `strict`-shaped for the Anthropic API, and
+`agent/brain.py`'s `RoundContext`/`BrainStep` are already brain-agnostic, so EST-05 should not need to change
+any of EST-03/EST-04's shapes.
