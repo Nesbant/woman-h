@@ -128,9 +128,9 @@ def _request_body(ctx: RoundContext, config):
         "messages": _messages(ctx),
         "tools": _tool_definitions(),
         "tool_choice": "auto",
-        # At most one tool call per round (`BrainStep.tool_call` is singular, not a list) — the orchestrator's
-        # own `MAX_ROUNDS` loop, not the provider, is what runs several tools across a turn.
-        "parallel_tool_calls": False,
+        # No `parallel_tool_calls`: with `require_parameters` it excludes every provider of the default model
+        # (OpenRouter 404, found in the first real smoke). `_tool_step` runs only the first call of a response;
+        # the history sent next round shows just that one, so the model asks for the rest in later rounds.
         "max_tokens": MAX_REPLY_TOKENS,
         "response_format": {"type": "json_schema",
                             "json_schema": {"name": "vera_reply", "strict": True, "schema": FINAL_REPLY_SCHEMA}},
