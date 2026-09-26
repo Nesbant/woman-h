@@ -207,7 +207,11 @@ h1, h2, h3, p { margin: 0 }
 .chat-message .small { display: block; margin-top: 6px }
 .conversation-composer { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding-top: 14px; border-top: 1px solid var(--line-soft) }
 .conversation-composer label { font-size: 12px; font-weight: 600; color: var(--text-2) }
-.conversation-composer > .textarea { resize: none; overflow-y: auto; max-height: 240px }
+.composer-textarea-wrap { display: flex; align-items: flex-end; gap: 8px }
+.composer-textarea-wrap > .textarea { flex: 1 1 auto; min-width: 0; resize: none; overflow-y: auto; max-height: 240px }
+.mic-button { flex: none; width: 44px; min-width: 44px; padding: 0 }
+.mic-button[aria-pressed="true"] { background: var(--brand); color: #fff; border-color: var(--brand) }
+.dictation-status { color: var(--brand-deep) }
 .composer-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap }
 .attachment-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none }
 .attachment-chips .chip { max-width: 100%; min-width: 0; gap: 8px; white-space: normal }
