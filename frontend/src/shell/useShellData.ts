@@ -42,7 +42,8 @@ export function useShellData(route: Route, user: User) {
   const refresh = useCallback(() => setTick(v => v + 1), [])
   const institutional = route.name === 'institutional'
   const latest = useLatestRecord(!institutional, tick)
-  const recordId = route.name === 'record' ? route.recordId : latest?.id
+  const recordId = route.name === 'record' ? route.recordId
+    : route.name === 'conversation' ? route.recordId ?? latest?.id : latest?.id
   const overview = useOverview(recordId, !institutional, tick, route)
   const caseCount = useCaseCount(user.memberships[0]?.institution_id, institutional, tick)
   return { institutional, recordId, overview, caseCount, refresh }

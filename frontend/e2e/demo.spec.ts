@@ -11,6 +11,8 @@ test('Private → IA → borrador → selección → envío → Institutional', 
   await expect(page.getByText('✕ No puede verlo')).toHaveCount(4)
 
   await page.getByRole('article', { name: 'Situación #001' }).getByRole('button', { name: 'Continuar' }).click()
+  await expect(page).toHaveURL(/#\/s\/[^/]+\/conversar$/)
+  await page.getByRole('button', { name: 'Eventos', exact: true }).click()
   await expect(page.getByText('Fecha inconsistente')).toBeVisible()
   await page.getByRole('button', { name: /captura_01.png ↗/ }).click()
   await expect(page.getByText('Fragmento usado por VERA')).toBeVisible()

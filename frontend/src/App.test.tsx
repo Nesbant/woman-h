@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom/vitest'
 import { App } from './App'
@@ -23,6 +23,34 @@ test('entra como persona con la demo y ve su espacio privado', async () => {
   expect(screen.getByText('Privado · Solo tú')).toBeInTheDocument()
   expect(screen.getAllByText('✕ No puede verlo')).toHaveLength(4)
   expect(calls.find(c => c.url.endsWith('/demo/switch'))!.body).toEqual({ view_as: 'person' })
+})
+
+test('conversación general y de situación conservan acceso a las vistas de revisión', async () => {
+  mockApi({
+    'GET /health': { demo: false }, 'GET /auth/me': maria,
+    'GET /records': [{ id: 'r1', title: 'Situación #001', created_at: '', updated_at: '2026-09-20T00:00:00Z' }],
+    'GET /records/r1/overview': {
+      record: { id: 'r1', title: 'Situación #001', created_at: '', updated_at: '2026-09-20T00:00:00Z' },
+      story: null, files: 0,
+      timeline: { processed: false, revision: 0, total: 0, pending: 0, accepted: 0, discarded: 0, open_review_items: 0 },
+      draft: { exists: false, reviewed: false, stale: false }, submissions: [],
+    },
+  })
+  render(<App />)
+  const user = userEvent.setup()
+  await user.click(await screen.findByRole('button', { name: 'Conversar con VERA' }))
+  expect(window.location.hash).toBe('#/conversar')
+  expect(await screen.findByRole('heading', { name: 'Conversa con VERA' })).toBeInTheDocument()
+  expect(screen.queryByRole('navigation', { name: 'Pasos de la situación' })).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Mi espacio' }))
+  const card = await screen.findByRole('article', { name: 'Situación #001' })
+  await user.click(within(card).getByRole('button', { name: 'Continuar' }))
+  expect(window.location.hash).toBe('#/s/r1/conversar')
+  expect(await screen.findByText('Este espacio está vinculado a esta situación. Puedes volver a revisar lo registrado cuando quieras.')).toBeInTheDocument()
+  expect(screen.queryByRole('navigation', { name: 'Pasos de la situación' })).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Lo registrado' }))
+  expect(window.location.hash).toBe('#/s/r1/registrar')
+  expect(screen.getByRole('navigation', { name: 'Pasos de la situación' })).toBeInTheDocument()
 })
 
 test('una cuenta con membresía ve el espacio institucional, nunca registros privados ajenos', async () => {

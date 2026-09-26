@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { deleteRecord, getOverview, listRecords, renameRecord } from '../../api/records'
 import type { Overview, User } from '../../types'
-import { navigate, NEW_RECORD, recordPath } from '../../router'
+import { conversationPath, navigate, NEW_RECORD, recordPath } from '../../router'
 import { firstName } from '../../format'
 import { ErrorAlert, Loading, PageTitle } from '../../components/PageTitle'
 import { useToast } from '../../components/Toast'
@@ -45,7 +45,7 @@ export function Home({ user }: { user: User }) {
   const create = () => navigate(recordPath(NEW_RECORD, 'registrar'))
   return <>
     <PageTitle eyebrow="Espacio privado" title={`Hola, ${firstName(user.name)}`} lead="Ordena lo que ocurrió a tu ritmo. Guardar algo aquí no significa haberlo reportado.">
-      <button className="btn btn-primary" onClick={create}>+ Registrar una situación</button>
+      <button className="btn btn-primary" onClick={() => navigate(conversationPath())}>Conversar con VERA</button>
     </PageTitle>
     <PrivacyHero />
     <div className="two-col">

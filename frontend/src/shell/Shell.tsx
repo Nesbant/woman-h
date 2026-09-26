@@ -15,6 +15,7 @@ const CRUMBS: Record<Step | 'enviado', string> = { registrar: 'Registrar', enten
 function crumbs(route: Route, recordTitle: string | undefined): [string, string] {
   switch (route.name) {
     case 'home': return ['Mi espacio', '/ Situaciones']
+    case 'conversation': return ['Conversación', route.recordId ? `/ ${recordTitle ?? 'Situación'}` : '/ Espacio privado']
     case 'profile': return ['Mi perfil', '/ Datos para tus reportes']
     case 'institutional': return ['VERA Institutional', '/ Casos recibidos']
     case 'record': return [CRUMBS[route.step], `/ ${recordTitle ?? (route.recordId === NEW_RECORD ? 'Nueva situación' : 'Situación')}`]
@@ -23,6 +24,7 @@ function crumbs(route: Route, recordTitle: string | undefined): [string, string]
 
 function activePage(route: Route) {
   if (route.name === 'record') return route.step === 'enviado' ? 'compartir' : route.step
+  if (route.name === 'conversation') return 'conversation'
   return route.name === 'home' || route.name === 'profile' ? route.name : null
 }
 
@@ -40,7 +42,8 @@ export function Shell({ route, user, demo, onDemo, onLogout, data }: Props) {
   return <RecordContext.Provider value={{ overview: data.overview, refresh: data.refresh }}>
     <div className="layout">
       <Sidebar user={user} demo={demo} onDemo={onDemo} onLogout={onLogout} institutional={data.institutional} caseCount={data.caseCount}
-        page={page} recordId={data.recordId} overview={data.overview} done={done} onStep={goStep} />
+        page={page} recordId={data.recordId} conversationRecordId={route.name === 'record' || route.name === 'conversation' ? route.recordId : undefined}
+        overview={data.overview} onStep={goStep} />
       <div className="content">
         <Topbar title={title} subtitle={subtitle} institutional={data.institutional} user={user} />
         <main className="main">

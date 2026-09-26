@@ -1,8 +1,7 @@
 import type { DemoView } from '../api/session'
 import type { Overview, User } from '../types'
-import { navigate } from '../router'
+import { conversationPath, navigate } from '../router'
 import type { Step } from '../router'
-import { STEPS } from '../progress'
 import { CaseIcon, InboxIcon, LockIcon, PersonIcon, SquareIcon } from '../components/icons'
 import { Brand } from './Brand'
 
@@ -10,20 +9,28 @@ export const DEMO_PERSON = 'maria@example.test'
 export const DEMO_ORGANIZATION = 'lucia@example.test'
 
 type Common = { user: User; demo: boolean; onDemo: (view: DemoView) => void; onLogout: () => void }
-type PrivateProps = { page: 'home' | 'profile' | Step | null; recordId: string | undefined; overview: Overview | null; done: Record<Step, boolean>; onStep: (step: Step) => void }
+type PrivateProps = { page: 'home' | 'profile' | 'conversation' | Step | null; recordId: string | undefined; conversationRecordId?: string; overview: Overview | null; onStep: (step: Step) => void }
 
-function PrivateNav({ page, recordId, overview, done, onStep }: PrivateProps) {
+const REVIEW_LINKS: { step: Step; label: string }[] = [
+  { step: 'registrar', label: 'Lo registrado' },
+  { step: 'entender', label: 'Eventos' },
+  { step: 'preparar', label: 'Borrador' },
+  { step: 'compartir', label: 'Compartir' },
+]
+
+function PrivateNav({ page, recordId, conversationRecordId, overview, onStep }: PrivateProps) {
   return <>
     <div className="space-note"><div className="space-note-title"><LockIcon />Espacio privado · Solo tú</div><p>Tu organización no puede ver ni saber que estos registros existen.</p></div>
     <nav className="side-nav">
+      <button className="side-link" aria-current={page === 'conversation' ? 'page' : undefined} onClick={() => navigate(conversationPath(conversationRecordId))}><span className="side-icon"><SquareIcon /></span>Conversación</button>
       <button className="side-link" aria-current={page === 'home' ? 'page' : undefined} onClick={() => navigate('')}><span className="side-icon"><SquareIcon /></span>Mi espacio</button>
-      <button className="side-link" aria-current={page === 'profile' ? 'page' : undefined} onClick={() => navigate('perfil')}><span className="side-icon"><PersonIcon /></span>Mi perfil</button>
       {recordId && <>
-        <div className="side-label">{overview?.record.title ?? 'Nueva situación'}</div>
-        {STEPS.map((step, i) => <button key={step.id} className="side-link" aria-current={page === step.id ? 'page' : undefined} onClick={() => onStep(step.id)}>
-          <span className={`step-dot${done[step.id] ? ' done' : page === step.id ? ' active' : ''}`}>{done[step.id] ? '✓' : i + 1}</span><span style={{ flex: 1 }}>{step.label}</span>
+        <div className="side-label">Revisar · {overview?.record.title ?? 'Nueva situación'}</div>
+        {REVIEW_LINKS.map(({ step, label }) => <button key={step} className="side-link" aria-current={page === step ? 'page' : undefined} onClick={() => onStep(step)}>
+          <span style={{ flex: 1 }}>{label}</span>
         </button>)}
       </>}
+      <button className="side-link" aria-current={page === 'profile' ? 'page' : undefined} onClick={() => navigate('perfil')}><span className="side-icon"><PersonIcon /></span>Mi perfil</button>
     </nav>
   </>
 }
