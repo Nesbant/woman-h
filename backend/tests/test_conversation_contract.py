@@ -44,7 +44,9 @@ def test_conversation_view_matches_the_contract_and_is_scoped_to_its_owner(clien
     response = client.get(f"/api/records/{case_id}/conversation")
     assert response.status_code == 200
     view = ConversationView.model_validate(response.json())
-    assert view.case_id == case_id and view.case_state.case_id == case_id and view.messages
+    # EST-01: message history is real, so a conversation that was just started truly has none yet.
+    # `case_state` is EST-03's real derivation (`agent/state.py::build_case_state`, see conversation.py).
+    assert view.case_id == case_id and view.case_state.case_id == case_id and view.messages == []
 
     login(client, "bea@example.test")
     assert client.get(f"/api/records/{case_id}/conversation").status_code == 404
@@ -57,10 +59,38 @@ def test_case_state_matches_the_contract_and_is_scoped_to_its_owner(client):
     response = client.get(f"/api/records/{case_id}/conversation/state")
     assert response.status_code == 200
     state = CaseState.model_validate(response.json())
-    assert state.case_id == case_id and state.events
+    # EST-03: `case_state` is now the real derivation (`agent/state.py::build_case_state`), not EST-00's
+    # frozen example — a conversation that was just started truly has no events yet.
+    assert state.case_id == case_id and state.events == [] and state.goal == "unspecified"
 
     login(client, "bea@example.test")
     assert client.get(f"/api/records/{case_id}/conversation/state").status_code == 404
+
+
+def test_case_state_reflects_a_confirmed_event_from_the_conversation(client):
+    from app.agent.state import build_case_state
+    from app.agent.tools import ToolContext, execute
+    from app.db import SessionLocal
+    from app.models import Timeline
+
+    login(client)
+    case_id = client.post("/api/conversations").json()["case_id"]
+    message_text = "El miércoles tuve una reunión con mi supervisor que me incomodó."
+    db = SessionLocal()
+    ctx = ToolContext(db=db, record_id=case_id, row=db.get(Timeline, case_id), message_id="msg-1",
+                      message_text=message_text)
+    created = execute("create_or_update_candidate_event", {
+        "event_id": None, "title": "Reunión incómoda", "description": message_text, "date_kind": "unknown",
+        "event_date": None, "approximate_date": None, "event_time": None, "origin": "user_statement",
+        "user_quote": "reunión con mi supervisor que me incomodó"}, ctx)
+    execute("confirm_event", {"event_id": created.content["event_id"], "user_quote": "el miércoles"}, ctx)
+    db.commit()
+    db.close()
+
+    response = client.get(f"/api/records/{case_id}/conversation/state")
+    state = CaseState.model_validate(response.json())
+    assert state.counts.confirmed == 1
+    assert state.events[0].status == "confirmed" and state.events[0].source.kind == "message"
 
 
 def test_send_message_validates_input_and_answers_with_the_contract(client):

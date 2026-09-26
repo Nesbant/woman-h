@@ -9,8 +9,8 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from .db import get_db
-from .models import (Account, ComplaintDraft, FileAccount, PrivateRecord, RecordFile, RecordSubmission, StartEntry,
-                     Timeline, User)
+from .models import (Account, ComplaintDraft, ConversationMessage, ConversationState, FileAccount, PrivateRecord,
+                     RecordFile, RecordSubmission, StartEntry, Timeline, User)
 from .records import owned_record
 from .security import current_user
 from .storage import PrivateStorage, get_storage
@@ -18,7 +18,7 @@ from .storage import PrivateStorage, get_storage
 router = APIRouter(prefix="/api/records", tags=["Registros privados"])
 logger = logging.getLogger(__name__)
 # Children first; explicit deletes work the same on PostgreSQL and on SQLite without foreign-key enforcement.
-PRIVATE_TABLES = (StartEntry, ComplaintDraft, Timeline, RecordSubmission, Account)
+PRIVATE_TABLES = (StartEntry, ComplaintDraft, Timeline, ConversationMessage, ConversationState, RecordSubmission, Account)
 
 
 def stored_keys(db, record_id):

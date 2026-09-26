@@ -1,9 +1,11 @@
-from fastapi import Depends, FastAPI, Request
+from contextlib import asynccontextmanager
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session as DBSession
+from starlette.concurrency import run_in_threadpool
 from .config import settings
 from .db import get_db
 from .records import router as records_router
@@ -21,7 +23,23 @@ from .profile import router as profile_router
 from .record_removal import router as record_removal_router
 
 config = settings()
-app = FastAPI(title="VERA · API", docs_url="/api/docs" if config.app_env != "production" else None, redoc_url=None)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Railway's preDeployCommand runs in a separate, ephemeral container with no volume mounted (confirmed
+    # against Railway's own docs, docs.railway.com/guides/pre-deploy-command) — so the production seed, which
+    # writes evidence files to the persistent volume (`STORAGE_ROOT`), cannot run there; SEED_ON_START runs it
+    # here instead, once per process start, in the real container with the volume attached. Off by default;
+    # `python -m app.seed_production` (or a one-off Railway run) is the alternative if this stays disabled.
+    if config.seed_on_start:
+        from .seed_production import run as run_seed_production
+        await run_in_threadpool(run_seed_production)
+    yield
+
+
+app = FastAPI(title="VERA · API", docs_url="/api/docs" if config.app_env != "production" else None,
+             redoc_url=None, lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(records_router)
 app.include_router(accounts_router)
@@ -62,3 +80,26 @@ async def validation_error(request, exc):
 def health(db: DBSession = Depends(get_db)):
     db.execute(text("SELECT 1"))
     return {"status": "ok", "demo": config.demo_enabled}
+
+
+# Railway option A: FastAPI also serves the built SPA (`frontend/dist`) so the API and the frontend share one
+# origin (required by the `SameSite=strict`/`path=/api` session cookie). Registered unconditionally (not only
+# when the dist dir exists at import time) and re-checked per request, so it stays testable and behaves exactly
+# like today's default 404 when there is no build to serve. Declared last so every real `/api/*` route above
+# still wins the match.
+@app.get("/{full_path:path}")
+def spa(full_path: str):
+    if full_path == "api" or full_path.startswith("api/"):
+        raise HTTPException(404, "Not Found")
+    dist = settings().frontend_dist
+    if not dist.is_dir():
+        raise HTTPException(404, "Not Found")
+    dist = dist.resolve()
+    if full_path:
+        candidate = (dist / full_path).resolve()
+        if candidate.is_relative_to(dist) and candidate.is_file():
+            return FileResponse(candidate)
+    index = dist / "index.html"
+    if not index.is_file():
+        raise HTTPException(404, "Not Found")
+    return FileResponse(index)

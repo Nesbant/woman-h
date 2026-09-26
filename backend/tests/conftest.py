@@ -25,7 +25,8 @@ from sqlalchemy import delete
 from app.db import SessionLocal, engine
 from app.main import app
 from app.models import (Membership, Session, User, Institution, PrivateRecord, Account, RecordFile, FileAccount,
-                        StartEntry, Timeline, ComplaintDraft, InstitutionalCase, CaseFile, Profile, RecordSubmission)
+                        StartEntry, Timeline, ComplaintDraft, ConversationMessage, ConversationState,
+                        InstitutionalCase, CaseFile, Profile, RecordSubmission)
 from app.seed import seed
 
 HEADERS = {"Origin": "http://localhost:5173", "X-VERA-Request": "1"}
@@ -45,9 +46,20 @@ def schema():
 @pytest.fixture(autouse=True)
 def data(schema):
     with SessionLocal.begin() as db:
-        for model in (RecordSubmission, Profile, CaseFile, InstitutionalCase, ComplaintDraft, Timeline, StartEntry, FileAccount, RecordFile, Account, PrivateRecord, Session, Membership, User, Institution):
+        for model in (RecordSubmission, Profile, CaseFile, InstitutionalCase, ComplaintDraft, ConversationMessage,
+                     ConversationState, Timeline, StartEntry, FileAccount, RecordFile, Account, PrivateRecord,
+                     Session, Membership, User, Institution):
             db.execute(delete(model))
     seed()
+
+
+@pytest.fixture(autouse=True)
+def no_frontend_dist(monkeypatch, tmp_path):
+    """Backend tests must not depend on whether `frontend/dist` happens to exist on disk (e.g. after a local
+    `npm run build`): default every test to a path that does not exist, matching CI (separate frontend/backend
+    checkouts). Tests for the SPA-serving feature itself override this via their own `frontend_dist` fixture."""
+    from app.config import settings
+    monkeypatch.setattr(settings(), "frontend_dist", tmp_path / "no-frontend-dist-here")
 
 
 @pytest.fixture

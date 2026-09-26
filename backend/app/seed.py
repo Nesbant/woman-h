@@ -1,11 +1,12 @@
 """Carga explícita e idempotente; nunca cambia contraseñas de cuentas existentes."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 from uuid import NAMESPACE_URL, UUID, uuid5
 from sqlalchemy import select
 from .config import settings
 from .db import SessionLocal
-from .models import Account, CaseFile, Institution, InstitutionalCase, Membership, PrivateRecord, Profile, RecordFile, User
+from .models import (Account, CaseFile, ConversationMessage, Institution, InstitutionalCase, Membership,
+                    PrivateRecord, Profile, RecordFile, Timeline, User)
 from .security import passwords
 
 DEMO_USERS = [
@@ -82,6 +83,38 @@ def ensure_record(db, record_id, owner_id):
                                                   approximate_date="mediados de septiembre", mentioned_people="Juan X. · Supervisor"))
 
 
+# EST-07 (issue #13): María's opening conversation, in her own words — the same two sentences the seeded
+# relato (`demo_assets.RELATO`) already tells, split into the narrate/confirm/narrate turns a real chat with
+# her would plausibly have had: she tells the first fact, asks VERA to keep it, then adds a second one that
+# is left as a candidate, exactly as a person exploring the conversation for the first time would leave it —
+# not everything gets confirmed right away. Reusing the relato's own wording (rather than inventing new
+# facts) is what makes this conversation "consistent with her evidence" instead of a parallel, unrelated one.
+# María's opening chat, stored as history on her Situación #001 (EST-07). Saving a conversation never
+# registers facts (decision D1): these facts are already in her relato and evidence, so no events are added.
+CONVERSATION = [
+    ("user", "A mediados de septiembre tuve una reunión con mi supervisor. Me hizo un comentario que me incomodó."),
+    ("assistant", "Gracias por contármelo. Ese hecho ya está en tu relato: lo verás en tu cronología para "
+                  "revisarlo. Nada se registra hasta que tú lo confirmes."),
+    ("user", "El martes 15 por la noche recibí mensajes suyos fuera del horario laboral."),
+    ("assistant", "Lo tengo en cuenta. En captura_01.png hay mensajes de esa noche; puedes revisar cómo quedó "
+                  "en tu cronología cuando quieras."),
+]
+
+
+def ensure_conversation(db, record_id):
+    """Idempotent: skipped once the case already has any conversation history. Deterministic ids and
+    increasing timestamps keep the order stable across runs."""
+    if db.scalar(select(ConversationMessage).where(ConversationMessage.record_id == record_id)) is not None:
+        return False
+    start = datetime.now(timezone.utc)
+    for index, (role, text) in enumerate(CONVERSATION):
+        db.add(ConversationMessage(id=demo_id(f"conversation:{record_id}:{index}"), record_id=record_id, role=role,
+                                   text=text, client_message_id=None, attachment_ids=[], event_ids=[],
+                                   created_at=start + timedelta(seconds=index)))
+    db.flush()
+    return True
+
+
 def demo_assets():
     """(filename, builder, description, linked to the relato)."""
     from .demo_assets import CAPTURA_01, CAPTURA_02, CORREO_LINES, chat_png, room_png, text_pdf
@@ -113,10 +146,14 @@ def seed_demo_case():
     with SessionLocal() as db:
         ensure_profile(db, maria, andina)
         ensure_record(db, record_id, maria)
-        db.commit()
         seed_history(db, store, andina)
         added = attach_missing_files(db, store, record_id)
-    print("Situación ficticia preparada para María X." if added else "La situación ficticia ya existe. No se modificó.")
+        added_conversation = ensure_conversation(db, record_id)
+        db.commit()
+    if added or added_conversation:
+        print("Situación ficticia preparada para María X.")
+    else:
+        print("La situación ficticia ya existe. No se modificó.")
     return record_id
 
 
@@ -198,11 +235,15 @@ def history_snapshot(spec, institution_id, files):
     }
 
 
-def history_case(spec, institution_id, submitter, store):
+def history_case(spec, institution_id, submitter, store, assignee_id=None):
+    """`assignee_id`: who a case is pre-assigned to. Defaults to each case's own demo reviewer (`spec.assignee`,
+    a `DEMO_USERS` email) via `demo_id` — the existing demo behavior, unchanged. `seed_production.py` passes an
+    explicit override instead, since the fictional per-case demo reviewers (`andrea@example.test`,
+    `carlos@example.test`) are never created outside demo mode."""
     from uuid import uuid4
     from .procedure import STEPS
     at = datetime.fromisoformat(spec.received)
-    assignee = demo_id(spec.assignee)
+    assignee = assignee_id or demo_id(spec.assignee)
     case = InstitutionalCase(id=str(uuid4()), case_id=spec.case_id, institution_id=institution_id, submitted_by=submitter,
                              submitted_at=at, status=spec.status, assignee_id=assignee, created_at=at, snapshot_json={},
                              procedure_json={key: {"status": state, "updated_at": spec.received, "updated_by": assignee}
@@ -212,13 +253,14 @@ def history_case(spec, institution_id, submitter, store):
     return case
 
 
-def seed_history(db, store, institution_id):
-    """Earlier synthetic cases, so Institutional shows a realistic queue. Only created when absent."""
+def seed_history(db, store, institution_id, assignee_id=None):
+    """Earlier synthetic cases, so Institutional shows a realistic queue. Only created when absent.
+    `assignee_id`: see `history_case`."""
     submitter = ensure_history_user(db)
     existing = set(db.scalars(select(InstitutionalCase.case_id).where(InstitutionalCase.institution_id == institution_id)))
     for spec in HISTORY:
         if spec.case_id not in existing:
-            db.add(history_case(spec, institution_id, submitter, store))
+            db.add(history_case(spec, institution_id, submitter, store, assignee_id))
     db.commit()
 
 

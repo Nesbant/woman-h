@@ -96,6 +96,8 @@ def attach_copies(case, store, files, now, written):
 def shared_label(source, shared_files):
     if source['kind'] == 'person':
         return "Declaración de la persona"
+    if source['kind'] == 'message':
+        return "Relato de la persona (conversación)"
     if source['kind'] != 'file':
         return "Relato de la persona"
     return source['label'] if source['source_id'] in shared_files else "Evidencia no compartida"
