@@ -32,6 +32,11 @@ def reread_events(record_id):
         return fresh.get(Timeline, record_id).events
 
 
+def read_state(record_id):
+    with SessionLocal() as fresh:
+        return build_case_state(fresh, record_id)
+
+
 def make_file(record_id, filename="captura_01.png", description=None):
     with SessionLocal.begin() as db:
         file = RecordFile(id=str(uuid4()), record_id=record_id, filename=filename, description=description,
@@ -252,7 +257,7 @@ def test_confirm_event_marks_it_accepted_and_reviewed(client):
     db.commit()
     event = reread_events(case_id)[0]
     assert event["status"] == "accepted" and event["reviewed"] is True
-    state = build_case_state(SessionLocal(), case_id)
+    state = read_state(case_id)
     confirmed = next(e for e in state.events if e.id == event["id"])
     assert confirmed.status == "confirmed"
     db.close()
@@ -311,7 +316,7 @@ def test_attach_evidence_links_the_file_and_it_shows_up_in_the_case_state(client
     result = execute("attach_evidence", {"event_id": created.content["event_id"], "file_id": file_id}, ctx)
     assert result.is_error is False and result.content["status"] == "linked"
     db.commit()
-    state = build_case_state(SessionLocal(), case_id)
+    state = read_state(case_id)
     assert state.counts.with_evidence == 1
     evidence = next(item for item in state.evidence if item.file_id == file_id)
     assert evidence.linked_event_ids == [created.content["event_id"]]

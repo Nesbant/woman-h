@@ -259,5 +259,11 @@ Runners: `backend/.venv/bin/python -m pytest -q` (SQLite; PG via `TEST_DATABASE_
   passing. `alembic check` not re-run (no migration in this phase: no model/schema changes, only two new
   `PrivateRecord`/`Timeline` rows created through existing tables at seed time).
 
+- 2026-09-26 PG verification: PR #23 merged; #24 retargeted to `iteration/conversational-vera` and synced.
+  Full PG suite hung: `test_agent_tools.py` called `build_case_state(SessionLocal(), …)` without closing,
+  leaving idle-in-transaction sessions that blocked the teardown `DROP TABLE conversation_states` (invisible on
+  SQLite). Fixed with a closing `read_state` helper. Fallback path now re-takes the PG advisory lock after
+  `rollback()` (409 if another worker took it). pytest PostgreSQL 207 passed; SQLite 206 passed / 1 skipped.
+
 ## Next step
-EST-08 (#14): integration + DoD — blocked on CMP-07 (teammate).
+EST-08 (#14): integration + DoD — blocked on CMP-07 (teammate). Real-provider smoke needs `ANTHROPIC_API_KEY`.

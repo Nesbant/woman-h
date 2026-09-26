@@ -18,10 +18,8 @@ round (missing key, a typed SDK error, a `refusal`/`max_tokens` stop, a judgment
 `_claude_or_fallback` rolls the whole attempted turn back — discarding any tool-call mutations that
 provider's earlier rounds already made in memory this turn, exactly like a normal exception would have to —
 and reruns it from scratch with a fresh `ScriptedBrain`, so the person always gets `mode: "demo"` and never a
-5xx or a half-written turn. Known limitation: on PostgreSQL, `db.rollback()` ends the transaction that held
-`_advisory_lock`'s advisory lock; the fallback attempt runs without it (the in-process `threading.Lock` still
-serializes this case for the whole request either way, so this only matters for true multi-process races
-during the rare fallback path itself)."""
+5xx or a half-written turn. On PostgreSQL `db.rollback()` also ends the transaction that held the advisory
+lock, so the fallback takes it again before rerunning (409 if another worker got it in between)."""
 import logging
 import threading
 from contextlib import contextmanager
@@ -166,6 +164,8 @@ def _claude_or_fallback(db: Session, record_id: str, data: ChatTurnRequest, exis
     except BrainError as error:
         logger.warning("%s failed this turn (%s); falling back to ScriptedBrain", type(brain).__name__, error)
         db.rollback()
+        if not _advisory_lock(db, record_id):  # the rollback released it; another worker may have taken it
+            raise HTTPException(409, BUSY)
         fallback = ScriptedBrain()
         user_row = existing_user or _save_user_message(db, record_id, data)
         step, touched = _run_brain(fallback, db, record_id, user_row)
