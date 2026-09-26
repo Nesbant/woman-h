@@ -1365,9 +1365,14 @@ Además puede complicar:
 
 ### Decisión
 
-**OCULTAR DEL HAPPY PATH**
+~~**OCULTAR DEL HAPPY PATH**~~ — reemplazada.
 
-No borrar.
+**Actualización (2026-09-26, decisión del usuario):** en la iteración conversacional, el chat ofrece dictado
+por voz con el servicio del navegador (Web Speech API, `es-PE`), mediante un botón de micrófono en el
+compositor. El texto dictado se revisa antes de enviarlo: nunca se envía solo. El botón se oculta si el
+navegador no admite reconocimiento de voz (por ejemplo, Firefox o un contexto no seguro) y avisa que el
+servicio de voz del navegador puede enviar el audio a su proveedor (Chrome lo envía a Google). Una
+transcripción en el servidor vía OpenRouter queda como mejora posterior.
 
 ---
 
