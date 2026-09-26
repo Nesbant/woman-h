@@ -399,6 +399,38 @@ Runners: `backend/.venv/bin/python -m pytest -q` (SQLite; PG via `TEST_DATABASE_
   regressions). PostgreSQL suite intentionally not run from this worktree (SQLite-only per this task's own
   instructions; the parent runs PostgreSQL separately).
 
+- 2026-09-26 fact-detection slice 1, follow-up from a real OpenRouter smoke: merged
+  `origin/feat/conversation-core-esteban` (brings `fix(agent): drop parallel_tool_calls` — OpenRouter 404s
+  "No endpoints found" for the default model with `provider.require_parameters` when `parallel_tool_calls`
+  is sent at all, not just when `true`). The smoke then surfaced two real bugs the fake-transport tests
+  couldn't catch: (1) on "Sí, guarda el del mensaje." with 2 open candidates, the model called
+  `confirm_event` on *both* instead of only the referenced one; (2) both turns ended with the generic
+  `ROUND_LIMIT_TEXT` because the model spent all 4 rounds on tool calls and never got a round left to answer
+  in. Fixes: strengthened `SYSTEM_PROMPT`'s "Detectar no es confirmar" section and the confirm/discard bullet
+  — a confirm/discard request names, at most, the hecho(s) the person mentions in that message, never every
+  candidate still open, not even ones VERA herself proposed earlier. Added `RoundContext.final_only`
+  (`agent/brain.py`): when `turn._run_brain` spends every one of `MAX_ROUNDS` rounds on a tool call, it asks
+  the brain once more with `final_only=True` — `OpenRouterBrain` sends `tool_choice: "none"` that one round
+  (keeping `tools` in the body so the reconstructed history's `tool_calls`/`tool` pairs stay valid);
+  `ScriptedBrain` already finalizes on its own once every fact-clause has a candidate, so it never reaches
+  this round with one still pending and ignores the flag. `ROUND_LIMIT_TEXT` now fires only if that extra
+  round itself fails or still comes back with a tool call (defensive; not expected in practice).
+  New tests: `test_conversation_turn.py` (+2: exactly 4 fact-clauses fill the budget and still get a real
+  reply; a 5th fact-clause over budget gets `ROUND_LIMIT_TEXT`, only 4 candidates created) and
+  `test_agent_llm.py` (+2: 4 tool rounds then the extra `tool_choice: "none"` round answers for real; a
+  misbehaving 5th tool call on that extra round falls back to `ROUND_LIMIT_TEXT` without executing it).
+  `pytest tests/test_conversation_turn.py tests/test_agent_llm.py tests/test_agent_safety.py
+  tests/test_agent_tools.py tests/test_conversation_dod.py tests/test_agent_prompt.py`: 56 passed. Full suite
+  SQLite (post-merge, which also brought `test_seed_production.py`/`test_timeline_ai_openrouter.py`): 251
+  passed / 1 skipped.
+  **Real OpenRouter smoke** (`OPENROUTER_API_KEY` read from the parent repo's `.env`, never printed or
+  committed; `OPENROUTER_TIMEOUT_SECONDS=120`; FastAPI `TestClient` + a temp SQLite DB, seeded
+  `maria@example.test`, `CHAT_BRAIN=openrouter`), the exact spec scenario run 3 times: every run produced 2
+  candidates from the first message (`mode: "ai"`, a natural tuteo reply, no `ROUND_LIMIT_TEXT`), and "Sí,
+  guarda el del mensaje." confirmed only the message-quote candidate in all 3 runs, leaving the other one a
+  candidate (`mode: "ai"` both turns, all 3 runs) — the two bugs found in the earlier smoke did not
+  reproduce after these fixes. Pushed to `origin/feat/fact-detection`.
+
 ## Next step
 EST-08 (#14): integration + DoD — blocked on CMP-07 (teammate). Real-provider smoke needs `OPENROUTER_API_KEY`.
 Fact-detection slice 2 (deferred by D5): resolve relative dates ("ayer", "el viernes") against the message's
