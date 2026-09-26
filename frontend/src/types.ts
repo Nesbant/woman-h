@@ -5,9 +5,12 @@ export type User = { id: string; name: string; email: string; memberships: Membe
 export type SourceRef = { id: string; kind: 'account' | 'record' | 'file' | 'person'; source_id: string; label: string; quote: string; page: number | null; field?: string | null }
 export type DateKind = 'exact' | 'approximate' | 'unknown'
 export type EventContent = { title?: string; description: string; date_kind: DateKind; event_date: string | null; approximate_date: string | null; event_time?: string | null }
+/** Where a fact came from; see conversation contract (`api/chat.ts`). Optional here: only events born
+ * from the conversation carry it today, existing proposals/manual events do not yet. */
+export type Origin = 'user_statement' | 'model_inference' | 'evidence' | 'manual'
 export type TimelineEvent = EventContent & {
   id: string; status: 'proposed' | 'accepted' | 'discarded'; edited: boolean; reviewed: boolean; mode: string; note?: string
-  original: EventContent; source: SourceRef; sources?: SourceRef[]; support_quotes?: string[]
+  original: EventContent; source: SourceRef; sources?: SourceRef[]; support_quotes?: string[]; origin?: Origin
 }
 export type ReviewItem = {
   id: string; kind: 'date_inconsistency' | 'possible_relation' | 'unlinked_evidence'; message: string; source_ids: string[]
@@ -62,3 +65,35 @@ export type CaseDetail = CaseSummary & {
   files: { id: string; filename: string; media_type: string; sha256: string }[]
   procedure: { key: string; label: string; description: string; reference: string | null; status: StepStatus; updated_at: string | null; updated_by: { id: string; name: string | null } | null }[]
 }
+
+/** Conversation contract (epic #5, FASE 0). Mirrors `backend/app/agent/contracts.py`; see `api/chat.ts`. */
+export type Goal = 'understand_options' | 'document_privately' | 'decide_whether_to_report' | 'prepare_to_share' | 'unspecified'
+export type Intent = 'narrate' | 'confirm' | 'correct' | 'discard' | 'ask_question' | 'attach_evidence' | 'request_share_preview' | 'other'
+export type BrainMode = 'ai' | 'demo'
+export type CaseEventStatus = 'candidate' | 'confirmed' | 'corrected' | 'discarded'
+export type DateInfo = { date_kind: DateKind; event_date: string | null; approximate_date: string | null }
+export type ChatSourceRef = { id: string; kind: SourceRef['kind'] | 'message'; source_id: string; label: string; quote: string; page: number | null; version: string | null; field: string | null; date: DateInfo | null }
+export type CaseEvent = {
+  id: string; title: string; description: string; date: DateInfo; event_time: string | null
+  status: CaseEventStatus; origin: Origin; reviewed: boolean; edited: boolean; needs_review: boolean
+  source: ChatSourceRef; sources: ChatSourceRef[]; support_quotes: string[]; note: string | null
+}
+export type CasePerson = { name: string; role: 'affected' | 'respondent' | 'witness' | 'other'; detail: string | null }
+export type CaseEvidenceItem = { file_id: string; filename: string; media_type: string; description: string | null; linked_event_ids: string[] }
+export type MissingInfo = { field: string; prompt: string; event_id: string | null }
+export type CaseCounts = { candidate: number; confirmed: number; corrected: number; discarded: number; with_evidence: number }
+export type CaseState = {
+  case_id: string; goal: Goal; people: CasePerson[]; events: CaseEvent[]; counts: CaseCounts
+  missing_information: MissingInfo[]; evidence: CaseEvidenceItem[]; updated_at: string
+}
+export type ChatMessage = {
+  id: string; role: 'user' | 'assistant'; text: string; created_at: string
+  client_message_id: string | null; intent: Intent | null; attachment_ids: string[]; event_ids: string[]
+}
+export type SuggestedActionType = 'open_share_preview' | 'review_timeline' | 'attach_evidence' | 'confirm_event' | 'open_draft'
+export type SuggestedAction = { type: SuggestedActionType; label: string; event_ids: string[]; file_ids: string[] }
+export type ChatTurn = {
+  user_message: ChatMessage; assistant_message: ChatMessage; touched_event_ids: string[]
+  suggested_actions: SuggestedAction[]; case_state: CaseState; mode: BrainMode
+}
+export type ConversationView = { case_id: string; messages: ChatMessage[]; case_state: CaseState }

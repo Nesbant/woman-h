@@ -1,0 +1,174 @@
+{
+  "case_id": "8f14e453-4033-4c1e-9c5e-1a2b3c4d5e6f",
+  "messages": [
+    {
+      "id": "9b1e2d3c-4a5f-4b6d-8e7f-000000000101", "role": "user",
+      "text": "A mediados de septiembre tuve una reunión con mi supervisor. Me hizo un comentario que me incomodó.",
+      "created_at": "2026-09-26T14:50:00Z", "client_message_id": "cmsg-001", "intent": "narrate",
+      "attachment_ids": [], "event_ids": ["8f14e453-4033-4c1e-9c5e-000000000001"]
+    },
+    {
+      "id": "9b1e2d3c-4a5f-4b6d-8e7f-000000000111", "role": "assistant",
+      "text": "Gracias por contármelo. Anoté esa reunión como un posible hecho en tu cronología privada; nadie más la ve. Puedes revisarla, corregirla o decirme que la guarde cuando quieras.",
+      "created_at": "2026-09-26T14:50:20Z", "client_message_id": null, "intent": null,
+      "attachment_ids": [], "event_ids": ["8f14e453-4033-4c1e-9c5e-000000000001"]
+    },
+    {
+      "id": "9b1e2d3c-4a5f-4b6d-8e7f-000000000102", "role": "user",
+      "text": "Guárdalo, quiero dejar constancia de eso.",
+      "created_at": "2026-09-26T14:52:00Z", "client_message_id": "cmsg-002", "intent": "confirm",
+      "attachment_ids": [], "event_ids": ["8f14e453-4033-4c1e-9c5e-000000000001"]
+    },
+    {
+      "id": "9b1e2d3c-4a5f-4b6d-8e7f-000000000112", "role": "assistant",
+      "text": "Listo, guardé la reunión con tu supervisor como un hecho confirmado. Guardarlo aquí no es lo mismo que denunciar; eso lo decides tú, cuando quieras y si quieres.",
+      "created_at": "2026-09-26T14:52:15Z", "client_message_id": null, "intent": null,
+      "attachment_ids": [], "event_ids": ["8f14e453-4033-4c1e-9c5e-000000000001"]
+    },
+    {
+      "id": "9b1e2d3c-4a5f-4b6d-8e7f-000000000103", "role": "user",
+      "text": "Además subí una captura de los mensajes que me mandó esa noche fuera de horario.",
+      "created_at": "2026-09-26T14:58:00Z", "client_message_id": "cmsg-003", "intent": "attach_evidence",
+      "attachment_ids": ["b3a1c9d2-6f21-4a11-9c5f-000000000201"], "event_ids": ["8f14e453-4033-4c1e-9c5e-000000000002"]
+    },
+    {
+      "id": "9b1e2d3c-4a5f-4b6d-8e7f-000000000113", "role": "assistant",
+      "text": "Vinculé esa captura a los mensajes del miércoles 16 por la noche. ¿Quieres que también marque ese hecho como confirmado?",
+      "created_at": "2026-09-26T14:58:30Z", "client_message_id": null, "intent": null,
+      "attachment_ids": [], "event_ids": ["8f14e453-4033-4c1e-9c5e-000000000002"]
+    },
+    {
+      "id": "9b1e2d3c-4a5f-4b6d-8e7f-000000000104", "role": "user",
+      "text": "Sí, y también quiero ver qué pasaría si más adelante decido compartir esto.",
+      "created_at": "2026-09-26T15:04:00Z", "client_message_id": "cmsg-004", "intent": "request_share_preview",
+      "attachment_ids": [], "event_ids": ["8f14e453-4033-4c1e-9c5e-000000000002"]
+    },
+    {
+      "id": "9b1e2d3c-4a5f-4b6d-8e7f-000000000114", "role": "assistant",
+      "text": "Confirmado. Aquí tienes una vista previa de lo que se compartiría si decides enviarlo más adelante. Nada se comparte todavía; la decisión sigue siendo tuya.",
+      "created_at": "2026-09-26T15:04:20Z", "client_message_id": null, "intent": null,
+      "attachment_ids": [],
+      "event_ids": ["8f14e453-4033-4c1e-9c5e-000000000001", "8f14e453-4033-4c1e-9c5e-000000000002", "8f14e453-4033-4c1e-9c5e-000000000003"]
+    }
+  ],
+  "case_state": {
+    "case_id": "8f14e453-4033-4c1e-9c5e-1a2b3c4d5e6f",
+    "goal": "document_privately",
+    "people": [
+      {"name": "María X.", "role": "affected", "detail": "Analista de Operaciones"},
+      {"name": "Juan X.", "role": "respondent", "detail": "Supervisor"},
+      {"name": "Lucía R.", "role": "witness", "detail": "Compañera de área; puede que haya visto algo en la reunión"}
+    ],
+    "events": [
+      {
+        "id": "8f14e453-4033-4c1e-9c5e-000000000001",
+        "title": "Reunión con el supervisor donde hizo un comentario que la incomodó",
+        "description": "A mediados de septiembre tuve una reunión con mi supervisor. Me hizo un comentario que me incomodó.",
+        "date": {"date_kind": "approximate", "event_date": null, "approximate_date": "mediados de septiembre de 2026"},
+        "event_time": null, "status": "confirmed", "origin": "user_statement", "reviewed": true, "edited": false, "needs_review": false,
+        "source": {
+          "id": "message:9b1e2d3c-4a5f-4b6d-8e7f-000000000101", "kind": "message",
+          "source_id": "9b1e2d3c-4a5f-4b6d-8e7f-000000000101", "label": "Tu mensaje en el chat",
+          "quote": "A mediados de septiembre tuve una reunión con mi supervisor. Me hizo un comentario que me incomodó.",
+          "page": null, "version": null, "field": null,
+          "date": {"date_kind": "approximate", "event_date": null, "approximate_date": "mediados de septiembre de 2026"}
+        },
+        "sources": [{
+          "id": "message:9b1e2d3c-4a5f-4b6d-8e7f-000000000101", "kind": "message",
+          "source_id": "9b1e2d3c-4a5f-4b6d-8e7f-000000000101", "label": "Tu mensaje en el chat",
+          "quote": "A mediados de septiembre tuve una reunión con mi supervisor. Me hizo un comentario que me incomodó.",
+          "page": null, "version": null, "field": null,
+          "date": {"date_kind": "approximate", "event_date": null, "approximate_date": "mediados de septiembre de 2026"}
+        }],
+        "support_quotes": ["Me hizo un comentario que me incomodó."], "note": null
+      },
+      {
+        "id": "8f14e453-4033-4c1e-9c5e-000000000002",
+        "title": "Mensajes fuera del horario laboral",
+        "description": "El miércoles 16 de septiembre por la noche recibí mensajes de Juan preguntando si seguía despierta.",
+        "date": {"date_kind": "exact", "event_date": "2026-09-16", "approximate_date": null},
+        "event_time": "22:43", "status": "confirmed", "origin": "evidence", "reviewed": true, "edited": false, "needs_review": false,
+        "source": {
+          "id": "file:b3a1c9d2-6f21-4a11-9c5f-000000000201:0", "kind": "file",
+          "source_id": "b3a1c9d2-6f21-4a11-9c5f-000000000201", "label": "captura_01.png",
+          "quote": "22:43 — Juan X.: «¿Sigues despierta? Quería conversar sobre lo de hoy.»",
+          "page": null, "version": "a1c2e3f4b5d6", "field": null,
+          "date": {"date_kind": "exact", "event_date": "2026-09-16", "approximate_date": null}
+        },
+        "sources": [{
+          "id": "file:b3a1c9d2-6f21-4a11-9c5f-000000000201:0", "kind": "file",
+          "source_id": "b3a1c9d2-6f21-4a11-9c5f-000000000201", "label": "captura_01.png",
+          "quote": "22:43 — Juan X.: «¿Sigues despierta? Quería conversar sobre lo de hoy.»",
+          "page": null, "version": "a1c2e3f4b5d6", "field": null,
+          "date": {"date_kind": "exact", "event_date": "2026-09-16", "approximate_date": null}
+        }],
+        "support_quotes": ["22:43 — Juan X.: «¿Sigues despierta? Quería conversar sobre lo de hoy.»"], "note": null
+      },
+      {
+        "id": "8f14e453-4033-4c1e-9c5e-000000000003",
+        "title": "Correo sobre la evaluación de desempeño al día siguiente",
+        "description": "Al día siguiente de los mensajes, Juan me escribió un correo para coordinar una revisión de mi evaluación de desempeño.",
+        "date": {"date_kind": "exact", "event_date": "2026-09-17", "approximate_date": null},
+        "event_time": "09:12", "status": "corrected", "origin": "evidence", "reviewed": true, "edited": true, "needs_review": false,
+        "source": {
+          "id": "file:c4a2d8e3-7f32-4a11-9c5f-000000000202:1", "kind": "file",
+          "source_id": "c4a2d8e3-7f32-4a11-9c5f-000000000202", "label": "correo_01.pdf",
+          "quote": "Como conversamos esta semana, revisaremos algunos puntos de tu evaluación de desempeño.",
+          "page": 1, "version": "f0e1d2c3b4a5", "field": null,
+          "date": {"date_kind": "exact", "event_date": "2026-09-17", "approximate_date": null}
+        },
+        "sources": [{
+          "id": "file:c4a2d8e3-7f32-4a11-9c5f-000000000202:1", "kind": "file",
+          "source_id": "c4a2d8e3-7f32-4a11-9c5f-000000000202", "label": "correo_01.pdf",
+          "quote": "Como conversamos esta semana, revisaremos algunos puntos de tu evaluación de desempeño.",
+          "page": 1, "version": "f0e1d2c3b4a5", "field": null,
+          "date": {"date_kind": "exact", "event_date": "2026-09-17", "approximate_date": null}
+        }],
+        "support_quotes": ["Como conversamos esta semana, revisaremos algunos puntos de tu evaluación de desempeño."],
+        "note": "Ajusté la fecha exacta al leer el correo."
+      },
+      {
+        "id": "8f14e453-4033-4c1e-9c5e-000000000004",
+        "title": "Posible patrón de contacto fuera de horario",
+        "description": "VERA notó que los mensajes del miércoles podrían formar un patrón junto con otras menciones del relato.",
+        "date": {"date_kind": "unknown", "event_date": null, "approximate_date": null},
+        "event_time": null, "status": "discarded", "origin": "model_inference", "reviewed": true, "edited": false, "needs_review": false,
+        "source": {
+          "id": "message:9b1e2d3c-4a5f-4b6d-8e7f-000000000101", "kind": "message",
+          "source_id": "9b1e2d3c-4a5f-4b6d-8e7f-000000000101", "label": "Inferencia de VERA sobre tu relato",
+          "quote": "A mediados de septiembre tuve una reunión con mi supervisor. Me hizo un comentario que me incomodó.",
+          "page": null, "version": null, "field": null, "date": {"date_kind": "unknown", "event_date": null, "approximate_date": null}
+        },
+        "sources": [{
+          "id": "message:9b1e2d3c-4a5f-4b6d-8e7f-000000000101", "kind": "message",
+          "source_id": "9b1e2d3c-4a5f-4b6d-8e7f-000000000101", "label": "Inferencia de VERA sobre tu relato",
+          "quote": "A mediados de septiembre tuve una reunión con mi supervisor. Me hizo un comentario que me incomodó.",
+          "page": null, "version": null, "field": null, "date": {"date_kind": "unknown", "event_date": null, "approximate_date": null}
+        }],
+        "support_quotes": [], "note": "Descartado: María prefirió no dejarlo como un hecho aparte."
+      }
+    ],
+    "counts": {"candidate": 0, "confirmed": 2, "corrected": 1, "discarded": 1, "with_evidence": 2},
+    "missing_information": [
+      {
+        "field": "event_date", "prompt": "¿Recuerdas una fecha más exacta para la reunión, o prefieres dejarla como \"mediados de septiembre\"?",
+        "event_id": "8f14e453-4033-4c1e-9c5e-000000000001"
+      },
+      {
+        "field": "respondent_role_confirmation", "prompt": "¿Juan X. sigue siendo tu supervisor directo, o cambió de rol desde entonces?",
+        "event_id": null
+      }
+    ],
+    "evidence": [
+      {
+        "file_id": "b3a1c9d2-6f21-4a11-9c5f-000000000201", "filename": "captura_01.png", "media_type": "image/png",
+        "description": "Captura de los mensajes de Juan fuera de horario.", "linked_event_ids": ["8f14e453-4033-4c1e-9c5e-000000000002"]
+      },
+      {
+        "file_id": "c4a2d8e3-7f32-4a11-9c5f-000000000202", "filename": "correo_01.pdf", "media_type": "application/pdf",
+        "description": null, "linked_event_ids": ["8f14e453-4033-4c1e-9c5e-000000000003"]
+      }
+    ],
+    "updated_at": "2026-09-26T15:04:20Z"
+  }
+}
