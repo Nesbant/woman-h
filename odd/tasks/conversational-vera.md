@@ -17,6 +17,29 @@ traceability, Private vs Institutional and the final share flow. This document c
 - D4 (user, 2026-09-26): OpenRouter replaces Anthropic as the real chat provider. `CHAT_BRAIN=openrouter`
   (was `claude`), `agent/llm.py::ClaudeBrain` removed and replaced by `agent/openrouter.py::OpenRouterBrain`
   over OpenRouter's OpenAI-compatible Chat Completions API. `anthropic` dependency removed.
+- D5 (user, 2026-09-26): fact-detection slice 1 — the core loop is CONVERSACIÓN → DETECCIÓN DE HECHOS →
+  HECHOS CANDIDATOS → CONFIRMACIÓN → CRONOLOGÍA. `SYSTEM_PROMPT` rewritten to tuteo (was voseo) and no
+  longer claims "una sola llamada por turno" (wrong: `turn.MAX_ROUNDS=4` already allowed several tool
+  rounds per message; only the prompt's own words were wrong). Relative dates ("ayer", "el viernes") stay
+  deferred to a later slice — `sources.literal_date` is unchanged, still only exact/approximate-if-hedged.
+
+## Fact spec (D5)
+
+- A hecho is a concrete event the person says happened: acción, mensaje, comentario, encuentro, llamada,
+  correo, contacto físico, interacción o situación identificable. Emociones, opiniones, interpretaciones,
+  preguntas, hipótesis o pedidos de consejo never create one by themselves.
+- A message may contain 0, 1 or several facts. `OpenRouterBrain`: one `create_or_update_candidate_event` per
+  round (already supported by `turn.py`'s existing loop, no code change there), each with its own literal
+  `user_quote`. `ScriptedBrain`: splits the message into clauses (sentence breaks, " y ", "; ", "después")
+  and creates one candidate per clause that reads like a concrete action (a small stemmed keyword list:
+  escrib-, mandó, dij-, llam-, coment-, gritó, tocó, acercó, citó, or a reunión/llamada/correo/mensaje/
+  encuentro/contacto noun) and is not an emotion/opinion/interpretation/question/hypothesis/advice-request —
+  otherwise it replies naturally without creating anything.
+- Detecting ≠ confirming: every candidate stays pending until an explicit confirm phrase. `ScriptedBrain`
+  now also recognizes bare "guarda" (not just "guárdalo"), and when a confirm/discard phrase matches several
+  open candidates, first tries to narrow it down by referent words in the message (e.g. "el del mensaje" →
+  the candidate built from an escribió/mandó clause) before falling back to asking which one.
+- Missing data (no explicit date/time/etc.) is allowed and never invented; `date_kind` stays `"unknown"`.
 
 ## Constraints
 Epic principles are non-negotiable: VERA never judges, never recommends sanctions, never pushes to report, never
@@ -348,5 +371,67 @@ Runners: `backend/.venv/bin/python -m pytest -q` (SQLite; PG via `TEST_DATABASE_
   mention in `test_agent_llm.py`'s comment about the previous fake — no code, dependency, or config
   reference to Anthropic remains.
 
+- 2026-09-26 fact-detection slice 1 (D5), on `feat/fact-detection`: `agent/prompt.py::SYSTEM_PROMPT` rewritten
+  to tuteo, byte-stable (still no interpolation), with explicit sections on what is/isn't a fact (the spec's
+  own examples), detection across several tool rounds, source/date rules, at-most-one clarifying question,
+  detect ≠ confirm (confirms only the referenced hecho), semantic-safety guardrails and tone — and no longer
+  says "una sola llamada por turno". Two stray voseo pronouns fixed in `agent/tools.py`'s tool-schema
+  descriptions ("vos" → "tú"); `demo_script.json` already had no voseo. `agent/scripted.py`: message-to-
+  clause splitting (`_clauses`/`_fact_clauses`) plus the action/non-fact keyword heuristic, chained across
+  rounds like the existing `attach_evidence` chaining (`_continue_narrate`/`_create_clause`/
+  `_finalize_narrate`); `_toward` (confirm/discard) now tries `_referent_words`/`_matches_referent` before
+  asking when several candidates are open. `agent/openrouter.py`/`agent/turn.py`: no code changes needed —
+  the per-round loop already supported several `create_or_update_candidate_event` calls in one turn.
+  New/updated tests: `tests/test_agent_prompt.py` (new, 6: no voseo, no "una sola llamada", fact definition +
+  spec examples present, mentions the 4-round budget, states detect≠confirm, still byte-stable/no braces);
+  `tests/test_conversation_turn.py` (+6: two distinct facts in one message → two candidates; confirming "el
+  del mensaje" targets only that one, the other stays a candidate in both `case_state` and the plain
+  timeline; 4 parametrized emotion/opinion/question/interpretation messages → 0 candidates each);
+  `tests/test_agent_llm.py` (+1: the same two-facts-then-targeted-confirm scenario through `OpenRouterBrain`
+  behind an `httpx.MockTransport` fake — 2 create calls + 1 final reply in one turn, then a `confirm_event`
+  call in the next turn, 5 request bodies total). No existing test needed behavior changes — every message
+  already in the suite either matches the new action-heuristic as a single clause or bypasses `ScriptedBrain`
+  narration entirely (confirm/discard/share phrases, attachment path, or fails earlier validation).
+  `pytest tests/test_conversation_turn.py tests/test_agent_llm.py tests/test_agent_safety.py
+  tests/test_agent_tools.py tests/test_conversation_dod.py tests/test_agent_prompt.py`: 52 passed. Full suite
+  SQLite: 229 passed / 1 skipped (this branch's own baseline before this slice was higher than the epic's
+  210/1 — it already carries the `feat/railway-deploy` merge's own tests; +13 are this slice's new tests, no
+  regressions). PostgreSQL suite intentionally not run from this worktree (SQLite-only per this task's own
+  instructions; the parent runs PostgreSQL separately).
+
+- 2026-09-26 fact-detection slice 1, follow-up from a real OpenRouter smoke: merged
+  `origin/feat/conversation-core-esteban` (brings `fix(agent): drop parallel_tool_calls` — OpenRouter 404s
+  "No endpoints found" for the default model with `provider.require_parameters` when `parallel_tool_calls`
+  is sent at all, not just when `true`). The smoke then surfaced two real bugs the fake-transport tests
+  couldn't catch: (1) on "Sí, guarda el del mensaje." with 2 open candidates, the model called
+  `confirm_event` on *both* instead of only the referenced one; (2) both turns ended with the generic
+  `ROUND_LIMIT_TEXT` because the model spent all 4 rounds on tool calls and never got a round left to answer
+  in. Fixes: strengthened `SYSTEM_PROMPT`'s "Detectar no es confirmar" section and the confirm/discard bullet
+  — a confirm/discard request names, at most, the hecho(s) the person mentions in that message, never every
+  candidate still open, not even ones VERA herself proposed earlier. Added `RoundContext.final_only`
+  (`agent/brain.py`): when `turn._run_brain` spends every one of `MAX_ROUNDS` rounds on a tool call, it asks
+  the brain once more with `final_only=True` — `OpenRouterBrain` sends `tool_choice: "none"` that one round
+  (keeping `tools` in the body so the reconstructed history's `tool_calls`/`tool` pairs stay valid);
+  `ScriptedBrain` already finalizes on its own once every fact-clause has a candidate, so it never reaches
+  this round with one still pending and ignores the flag. `ROUND_LIMIT_TEXT` now fires only if that extra
+  round itself fails or still comes back with a tool call (defensive; not expected in practice).
+  New tests: `test_conversation_turn.py` (+2: exactly 4 fact-clauses fill the budget and still get a real
+  reply; a 5th fact-clause over budget gets `ROUND_LIMIT_TEXT`, only 4 candidates created) and
+  `test_agent_llm.py` (+2: 4 tool rounds then the extra `tool_choice: "none"` round answers for real; a
+  misbehaving 5th tool call on that extra round falls back to `ROUND_LIMIT_TEXT` without executing it).
+  `pytest tests/test_conversation_turn.py tests/test_agent_llm.py tests/test_agent_safety.py
+  tests/test_agent_tools.py tests/test_conversation_dod.py tests/test_agent_prompt.py`: 56 passed. Full suite
+  SQLite (post-merge, which also brought `test_seed_production.py`/`test_timeline_ai_openrouter.py`): 251
+  passed / 1 skipped.
+  **Real OpenRouter smoke** (`OPENROUTER_API_KEY` read from the parent repo's `.env`, never printed or
+  committed; `OPENROUTER_TIMEOUT_SECONDS=120`; FastAPI `TestClient` + a temp SQLite DB, seeded
+  `maria@example.test`, `CHAT_BRAIN=openrouter`), the exact spec scenario run 3 times: every run produced 2
+  candidates from the first message (`mode: "ai"`, a natural tuteo reply, no `ROUND_LIMIT_TEXT`), and "Sí,
+  guarda el del mensaje." confirmed only the message-quote candidate in all 3 runs, leaving the other one a
+  candidate (`mode: "ai"` both turns, all 3 runs) — the two bugs found in the earlier smoke did not
+  reproduce after these fixes. Pushed to `origin/feat/fact-detection`.
+
 ## Next step
 EST-08 (#14): integration + DoD — blocked on CMP-07 (teammate). Real-provider smoke needs `OPENROUTER_API_KEY`.
+Fact-detection slice 2 (deferred by D5): resolve relative dates ("ayer", "el viernes") against the message's
+own timestamp instead of leaving them `date_kind: "unknown"`.

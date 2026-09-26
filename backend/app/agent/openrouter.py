@@ -126,8 +126,12 @@ def _request_body(ctx: RoundContext, config):
         "model": config.chat_model,
         "models": [config.chat_model, *config.chat_fallback_models],
         "messages": _messages(ctx),
+        # `tools` stays in the body even on the one `final_only` round (`turn._run_brain`'s extra round after
+        # `MAX_ROUNDS` tool rounds are spent): the reconstructed history's earlier `tool_calls`/`tool` message
+        # pairs (`_round_messages`) reference these same definitions, and dropping them would make that
+        # history invalid. `tool_choice: "none"` is what actually forces a plain answer that round.
         "tools": _tool_definitions(),
-        "tool_choice": "auto",
+        "tool_choice": "none" if ctx.final_only else "auto",
         # No `parallel_tool_calls`: with `require_parameters` it excludes every provider of the default model
         # (OpenRouter 404, found in the first real smoke). `_tool_step` runs only the first call of a response;
         # the history sent next round shows just that one, so the model asks for the rest in later rounds.

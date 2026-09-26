@@ -1,6 +1,8 @@
 {
   "narrate": "Gracias por contármelo. Anoté «{title}» como un posible hecho en tu cronología privada; nadie más la ve. Puedes revisarlo, corregirlo o decirme que lo guarde cuando quieras.",
+  "narrate_multi": "Entendí {count} momentos distintos: {titles}. Los dejé pendientes en tu cronología privada para que los revises, los corrijas o me digas que los guarde. ¿Quieres seguir contándome qué pasó?",
   "narrate_needs_clarification": "Cuéntame un poco más: ¿qué pasó, y si lo recuerdas, cuándo? Así puedo anotarlo en tu cronología privada.",
+  "no_fact_detected": "Te escucho. Si en algún momento quieres contarme algo puntual que haya pasado, lo anoto en tu cronología privada.",
   "confirm": "Listo, guardé «{title}» como un hecho confirmado. Guardarlo aquí no es lo mismo que denunciar; eso lo decides tú, cuando quieras y si quieres.",
   "confirm_none_open": "Todavía no tengo ningún hecho pendiente de esta conversación para guardar. Cuéntame primero lo que pasó y después dime que lo guarde.",
   "discard": "Entendido, descarté «{title}». Sigue en el historial como descartado; no lo elimino de tu cronología.",

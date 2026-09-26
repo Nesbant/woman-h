@@ -1,6 +1,7 @@
-"""EST-04 (issue #10): the turn orchestrator + `ScriptedBrain` fallback, exercised end to end through the
-real HTTP endpoints. `pytest tests/test_conversation_turn.py`."""
+"""EST-04 (issue #10); fact-detection slice 1 added below: the turn orchestrator + `ScriptedBrain` fallback,
+exercised end to end through the real HTTP endpoints. `pytest tests/test_conversation_turn.py`."""
 from uuid import uuid4
+import pytest
 from app.agent import turn as turn_module
 from conftest import login
 
@@ -132,3 +133,85 @@ def test_request_share_preview_returns_a_preview_action_without_confirming_anyth
     body = response.json()
     actions = [action for action in body["suggested_actions"] if action["type"] == "open_share_preview"]
     assert actions and actions[0]["event_ids"] == []  # nothing confirmed yet, so nothing would be shared
+
+
+# --- fact-detection slice 1: several distinct facts in one message, confirming only the right one -----------
+
+def test_two_distinct_facts_in_one_message_become_two_candidates(client):
+    case_id = start_case(client)
+    text = ("En la reunión hizo un comentario sobre mi cuerpo y ayer me escribió a las 11 preguntándome si "
+           "estaba despierta.")
+    response = send(client, case_id, text)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "demo"
+    events = candidate_events(body)
+    assert len(events) == 2
+    assert set(body["touched_event_ids"]) == {event["id"] for event in events}
+    reunion_event = next(e for e in events if "cuerpo" in e["source"]["quote"])
+    message_event = next(e for e in events if "escribió" in e["source"]["quote"])
+    assert reunion_event["id"] != message_event["id"]
+
+
+def test_confirming_by_referent_targets_only_the_right_candidate(client):
+    case_id = start_case(client)
+    text = ("En la reunión hizo un comentario sobre mi cuerpo y ayer me escribió a las 11 preguntándome si "
+           "estaba despierta.")
+    narrated = send(client, case_id, text).json()
+    events = candidate_events(narrated)
+    message_event = next(e for e in events if "escribió" in e["source"]["quote"])
+    reunion_event = next(e for e in events if e["id"] != message_event["id"])
+
+    confirmed = send(client, case_id, "Sí, guarda el del mensaje.").json()
+    updated_message = next(e for e in confirmed["case_state"]["events"] if e["id"] == message_event["id"])
+    updated_reunion = next(e for e in confirmed["case_state"]["events"] if e["id"] == reunion_event["id"])
+    assert updated_message["status"] == "confirmed"
+    assert updated_reunion["status"] == "candidate"  # untouched
+
+    timeline = client.get(f"/api/records/{case_id}/timeline").json()
+    persisted = next(e for e in timeline["events"] if e["id"] == message_event["id"])
+    assert persisted["status"] == "accepted" and persisted["reviewed"] is True
+    other_persisted = next(e for e in timeline["events"] if e["id"] == reunion_event["id"])
+    assert other_persisted["status"] == "proposed"
+
+
+@pytest.mark.parametrize("text", ["Me siento incómoda", "Creo que es raro", "¿Qué hago?",
+                                  "Seguro quería intimidarme"])
+def test_emotions_opinions_questions_and_interpretations_never_create_a_candidate(client, text):
+    case_id = start_case(client)
+    response = send(client, case_id, text)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["case_state"]["events"] == []
+    assert body["touched_event_ids"] == []
+    assert body["assistant_message"]["text"]
+
+
+# --- exactly at, and one over, the round budget (turn.MAX_ROUNDS) ------------------------------------------
+
+FOUR_FACTS_TEXT = ("El lunes me escribió preguntando cosas raras; el martes me llamó tres veces; el miércoles "
+                   "hizo un comentario en la reunión y el jueves me mandó un correo agresivo.")
+
+
+def test_four_facts_fill_the_round_budget_and_still_get_a_real_final_reply(client):
+    """`turn.MAX_ROUNDS=4`: 4 fact-clauses use every round on a `create_or_update_candidate_event` call, so
+    the brain never reaches its own finalize step inside the loop — the orchestrator's one extra
+    `final_only` round is what turns this into a real reply instead of the generic round-limit text."""
+    case_id = start_case(client)
+    response = send(client, case_id, FOUR_FACTS_TEXT)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "demo"
+    assert len(candidate_events(body)) == 4
+    assert body["assistant_message"]["text"] != turn_module.ROUND_LIMIT_TEXT
+
+
+def test_more_facts_than_the_round_budget_gets_the_round_limit_reply(client):
+    case_id = start_case(client)
+    text = FOUR_FACTS_TEXT[:-1] + "; y también el viernes tuvimos un encuentro incómodo."
+    response = send(client, case_id, text)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "demo"
+    assert len(candidate_events(body)) == 4  # bounded by MAX_ROUNDS; the 5th fact-clause never gets a round
+    assert body["assistant_message"]["text"] == turn_module.ROUND_LIMIT_TEXT
