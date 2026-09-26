@@ -32,4 +32,6 @@ ENV STORAGE_ROOT=/data/private-storage
 
 WORKDIR /app/backend
 EXPOSE 8000
-CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*'"]
+# Migrations run here, right before the server, instead of relying only on Railway's preDeployCommand
+# (it did not run on the first real deploy). `alembic upgrade head` is a no-op when already current.
+CMD ["sh", "-c", "python -m alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*'"]
