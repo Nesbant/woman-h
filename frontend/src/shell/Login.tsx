@@ -5,6 +5,7 @@ import type { DemoView } from '../api/session'
 import type { User } from '../types'
 import { LockIcon } from '../components/icons'
 import { ErrorAlert } from '../components/PageTitle'
+import { AboutVera } from '../components/AboutVera'
 import { Brand } from './Brand'
 
 function DemoAccess({ onDemo }: { onDemo: (view: DemoView) => void }) {
@@ -29,7 +30,9 @@ function LoginForm({ demo, error, onLogin, onDemo }: { demo: boolean; error: str
     finally { setBusy(false) }
   }
   return <form onSubmit={submit}>
-    <h2>Inicia sesión</h2>
+    <span className="login-form-eyebrow">Un espacio para ti</span>
+    <h2>Bienvenida de nuevo</h2>
+    <p className="login-form-lead">Ingresa a tu espacio para continuar a tu ritmo.</p>
     <label className="field"><span>Correo electrónico</span><input className="input" type="email" autoComplete="username" required maxLength={254} value={email} onChange={e => setEmail(e.target.value)} /></label>
     <label className="field"><span>Contraseña</span><input className="input" type="password" autoComplete="current-password" required maxLength={256} value={password} onChange={e => setPassword(e.target.value)} /></label>
     <ErrorAlert message={failure || error} />
@@ -39,14 +42,18 @@ function LoginForm({ demo, error, onLogin, onDemo }: { demo: boolean; error: str
 }
 
 export function Login(props: { demo: boolean; error: string; onLogin: (user: User) => void; onDemo: (view: DemoView) => void }) {
-  return <main className="login">
-    <section>
+  return <main className="login-page"><div className="login">
+    <section className="login-intro">
       <Brand />
-      <h1>Ordena lo que ocurrió.<br />Decide qué compartir.</h1>
-      <p className="lead">Un espacio privado para documentar situaciones de hostigamiento laboral. La IA organiza tus fuentes; tú revisas y decides si algo llega a tu organización.</p>
-      <div className="callout" style={{ marginTop: 24 }}><span className="icon"><LockIcon size={16} /></span>
-        <span><strong>Tu organización no puede ver ni saber</strong> que tus registros existen hasta que decidas compartirlos.</span></div>
+      <div className="login-intro-copy">
+        <span className="login-handwritten">Un espacio para volver a ti</span>
+        <h1><span>No tienes que</span>{' '}<span>atravesarlo todo</span>{' '}<span>a solas.</span></h1>
+        <p className="lead">Un espacio para conversar, ordenar lo que ocurrió y revisar tus registros a tu propio ritmo.</p>
+      </div>
+      <div className="login-companion"><img src="/images/vera-companion-sitting.jpeg" alt="Ilustración de VERA, un perrito lavanda" /><span>Puedes tomarte tu tiempo. Empieza cuando quieras.</span></div>
     </section>
-    <section className="card xl raised"><LoginForm {...props} /></section>
-  </main>
+    <section className="card xl raised login-card"><LoginForm {...props} />
+      <div className="login-privacy"><LockIcon size={18} /><p><strong>Tu espacio es privado.</strong> Tu organización no puede ver ni saber que tus registros existen hasta que decidas compartirlos.</p></div>
+    </section>
+  </div><AboutVera /></main>
 }
