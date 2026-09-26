@@ -61,12 +61,23 @@ class DemoSwitch(BaseModel):
     view_as: Literal["person", "organization"]
 
 
+def demo_personas():
+    """Who each 'ver como' button signs in as: the fictional demo users in demo mode, or the seeded
+    production accounts when the showcase is on. None when neither is enabled."""
+    if config.demo_enabled and config.app_env != "production":
+        return DEMO_PERSONAS
+    if config.showcase_enabled:
+        return {"person": config.seed_maria_email, "organization": config.seed_reviewer_email}
+    return None
+
+
 @router.post("/demo/switch")
 def demo_switch(data: DemoSwitch, response: Response, request: Request, db: DBSession = Depends(get_db)):
-    """Demo-only 'ver como': signs in as the synthetic person or reviewer. Disabled outside demo mode."""
-    if not config.demo_enabled or config.app_env == "production":
+    """'Ver como': signs in as the synthetic person or reviewer. Only in demo mode or with the showcase on."""
+    personas = demo_personas()
+    if personas is None or not personas[data.view_as]:
         raise HTTPException(404, "No encontrado")
-    user = db.scalar(select(User).where(User.email == DEMO_PERSONAS[data.view_as]))
+    user = db.scalar(select(User).where(User.email == personas[data.view_as]))
     if user is None or not user.active:
         raise HTTPException(404, "Ejecuta la carga ficticia para usar la demostración")
     return start_session(user, response, request, db)

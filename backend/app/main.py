@@ -79,7 +79,7 @@ async def validation_error(request, exc):
 @app.get("/api/health")
 def health(db: DBSession = Depends(get_db)):
     db.execute(text("SELECT 1"))
-    return {"status": "ok", "demo": config.demo_enabled}
+    return {"status": "ok", "demo": config.demo_enabled or config.showcase_enabled}
 
 
 # Railway option A: FastAPI also serves the built SPA (`frontend/dist`) so the API and the frontend share one

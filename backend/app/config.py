@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     session_hours: int = Field(default=8, ge=1, le=24)
     demo_enabled: bool = False
+    # Showcase: the login's "Entrar como persona/organización" buttons sign in as the seeded accounts
+    # (SEED_MARIA_EMAIL / SEED_REVIEWER_EMAIL) without a password. Allowed in production, unlike demo mode:
+    # it never creates the fictional demo users. Only for a deployment meant for synthetic-data testing.
+    showcase_enabled: bool = False
     demo_password: str | None = None
     storage_factory: str = "app.storage:LocalStorage"
     storage_root: Path = Path(__file__).resolve().parents[2] / ".private-storage"

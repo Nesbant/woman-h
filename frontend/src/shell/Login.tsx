@@ -9,13 +9,13 @@ import { AboutVera } from '../components/AboutVera'
 import { Brand } from './Brand'
 
 function DemoAccess({ onDemo }: { onDemo: (view: DemoView) => void }) {
-  return <>
-    <p className="small" style={{ marginTop: 8 }}>Demostración · datos sintéticos</p>
+  return <div className="demo-access">
+    <p className="small"><strong>Demostración con datos sintéticos.</strong> Entra sin contraseña para recorrer VERA como persona o como organización.</p>
     <div className="demo-quick">
       <button type="button" className="btn btn-secondary btn-sm" onClick={() => onDemo('person')}>Entrar como persona</button>
       <button type="button" className="btn btn-secondary btn-sm" onClick={() => onDemo('organization')}>Entrar como organización</button>
     </div>
-  </>
+  </div>
 }
 
 function LoginForm({ demo, error, onLogin, onDemo }: { demo: boolean; error: string; onLogin: (user: User) => void; onDemo: (view: DemoView) => void }) {
@@ -30,6 +30,7 @@ function LoginForm({ demo, error, onLogin, onDemo }: { demo: boolean; error: str
     finally { setBusy(false) }
   }
   return <form onSubmit={submit}>
+    {demo && <DemoAccess onDemo={onDemo} />}
     <span className="login-form-eyebrow">Un espacio para ti</span>
     <h2>Bienvenida de nuevo</h2>
     <p className="login-form-lead">Ingresa a tu espacio para continuar a tu ritmo.</p>
@@ -37,7 +38,6 @@ function LoginForm({ demo, error, onLogin, onDemo }: { demo: boolean; error: str
     <label className="field"><span>Contraseña</span><input className="input" type="password" autoComplete="current-password" required maxLength={256} value={password} onChange={e => setPassword(e.target.value)} /></label>
     <ErrorAlert message={failure || error} />
     <button className="btn btn-primary" disabled={busy}>{busy ? 'Ingresando…' : 'Ingresar a mi espacio'}</button>
-    {demo && <DemoAccess onDemo={onDemo} />}
   </form>
 }
 

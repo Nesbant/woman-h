@@ -89,6 +89,19 @@ def test_demo_switch_only_in_demo_mode(client, demo_record, monkeypatch):
     assert client.post("/api/demo/switch", json={"view_as": "person"}).status_code == 404
 
 
+def test_showcase_signs_in_as_the_seeded_accounts_without_demo_mode(client, demo_record, monkeypatch):
+    monkeypatch.setattr(config, "demo_enabled", False)
+    assert client.get("/api/health").json()["demo"] is False
+    monkeypatch.setattr(config, "showcase_enabled", True)
+    monkeypatch.setattr(config, "seed_maria_email", "maria@example.test")
+    monkeypatch.setattr(config, "seed_reviewer_email", "lucia@example.test")
+    assert client.get("/api/health").json()["demo"] is True
+    assert client.post("/api/demo/switch", json={"view_as": "person"}).json()["name"] == "María X."
+    assert client.post("/api/demo/switch", json={"view_as": "organization"}).json()["name"] == "Lucía R."
+    monkeypatch.setattr(config, "seed_reviewer_email", None)
+    assert client.post("/api/demo/switch", json={"view_as": "organization"}).status_code == 404
+
+
 def test_legacy_boolean_procedure_is_still_readable():
     steps = procedure_view({"rights_info": {"done": True, "done_at": "2026-09-25T10:00:00+00:00", "done_by": "u1"}})
     assert steps[0]["status"] == "done" and steps[0]["updated_by"] == "u1"
