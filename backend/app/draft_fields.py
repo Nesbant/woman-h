@@ -3,6 +3,7 @@
 Only events the person accepted and their confirmed profile feed the draft. Missing data stays empty, and a
 name VERA detects is prefilled as pending: it never counts as confirmed until the person says so.
 """
+from .agent.events import timeline_order
 
 # VERA explains each option in plain language; the person chooses and the organization decides.
 MEASURES = {
@@ -42,9 +43,10 @@ def fact_from(event, previous):
 
 
 def facts_from(events, previous_facts):
-    """Accepted events in timeline order; a description the person edited in the draft is kept."""
+    """Accepted events in timeline order (exact dates chronological); a description the person edited in the
+    draft is kept."""
     kept = {fact['event_id']: fact for fact in previous_facts}
-    return [fact_from(event, kept.get(event['id'])) for event in events if event['status'] == 'accepted']
+    return [fact_from(event, kept.get(event['id'])) for event in timeline_order(events) if event['status'] == 'accepted']
 
 
 def parse_mentioned(mentioned):

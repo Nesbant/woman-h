@@ -214,31 +214,25 @@ def test_demo_seed_repairs_a_partially_created_case(store, monkeypatch):
 
 
 def test_demo_seed_conversation_is_idempotent(store):
-    """EST-07 (issue #13): María's seeded conversation (`app.seed.ensure_conversation`) runs through the real
-    turn orchestrator, which must never be re-run once it already happened — `python -m app.seed` twice in a
-    row (this test's equivalent: `seed_demo_case()` twice) must leave the exact same `conversation_messages`
-    and `Timeline.events`, not duplicates from a second pass through `run_turn`. It lives on its own record
-    (`MARIA_CONVERSATION_RECORD`), separate from `demo_record`/`MARIA_RECORD`, so it never changes what the
-    `demo_record`-based fixture/timeline tests above see."""
+    """EST-07 (issue #13): María's seeded chat lives on her Situación #001 as history only — running the seed
+    twice leaves the same messages and never adds facts to her timeline (decision D1)."""
     from sqlalchemy import select
     from app.db import SessionLocal
-    from app.models import ConversationMessage, Timeline
-    from app.seed import MARIA_CONVERSATION_RECORD, demo_id, seed_demo_case
+    from app.models import ConversationMessage, PrivateRecord, Timeline
+    from app.seed import demo_id, seed_demo_case
 
+    def snapshot(record):
+        with SessionLocal() as db:
+            messages = list(db.scalars(select(ConversationMessage).where(ConversationMessage.record_id == record)
+                                       .order_by(ConversationMessage.created_at, ConversationMessage.id)))
+            timeline = db.get(Timeline, record)
+            owned = db.scalars(select(PrivateRecord.id).where(PrivateRecord.owner_id == demo_id("maria@example.test"))).all()
+            return [(m.id, m.role) for m in messages], timeline.events if timeline else None, owned
+
+    record = seed_demo_case()
+    first = snapshot(record)
     seed_demo_case()
-    record = demo_id(MARIA_CONVERSATION_RECORD)
-    with SessionLocal() as db:
-        messages_first = sorted(db.scalars(select(ConversationMessage.id)
-                                           .where(ConversationMessage.record_id == record)))
-        events_first = db.get(Timeline, record).events
-
-    seed_demo_case()
-    with SessionLocal() as db:
-        messages_second = sorted(db.scalars(select(ConversationMessage.id)
-                                            .where(ConversationMessage.record_id == record)))
-        events_second = db.get(Timeline, record).events
-
-    assert messages_first == messages_second  # same ids, not duplicated rows
-    assert len(messages_first) == 6  # 3 seeded turns: user + assistant reply each
-    assert events_first == events_second
-    assert [event["status"] for event in events_second] == ["accepted", "proposed"]
+    assert snapshot(record) == first
+    messages, _, owned = first
+    assert [role for _, role in messages] == ["user", "assistant", "user", "assistant"]
+    assert owned == [record]  # a single situation: the seed adds no extra case

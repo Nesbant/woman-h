@@ -2350,11 +2350,10 @@ Guardar la conversación tampoco es denunciar: sigue siendo Private hasta el `su
 
 ## Demo (EST-07)
 
-María tiene, además de *Situación #001* (relato + evidencia, la demo original de §55), una segunda situación
-separada, *Conversación #001*, con una conversación inicial de 2-3 turnos ya persistida (narrar → confirmar →
-narrar) generada por `ScriptedBrain` a través del mismo orquestador de turnos real, no por un fixture aparte
-— para que quede exactamente lo que produciría una conversación real. Es una situación separada de
-*Situación #001* a propósito: ambas comparten un único `Timeline` por caso, y `timeline.merge_proposals`
-conserva los hechos de origen conversación entre reprocesamientos (§13/§16) — mezclarla con la situación que
-usan las pruebas de "Organizar cronología" habría cambiado esos resultados. `python -m app.seed` crea ambas
-situaciones y es idempotente (no duplica mensajes ni eventos si se corre más de una vez).
+*Situación #001* de María trae una conversación inicial de dos turnos guardada como historial. No agrega
+hechos: los que menciona ya están en su relato y en su evidencia, y guardar la conversación no registra hechos
+(decisión D1). Así María tiene una sola situación y los recorridos de §55 siguen iguales. Las situaciones
+nuevas iniciadas desde el chat se numeran igual que las demás (*Situación #NNN*).
+
+Orden de los hechos: la cronología, el borrador, la vista previa y `CaseState` muestran los hechos con fecha
+exacta en orden cronológico, en los lugares que ya ocupaban; los aproximados o sin fecha no se mueven.

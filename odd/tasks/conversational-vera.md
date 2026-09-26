@@ -265,5 +265,18 @@ Runners: `backend/.venv/bin/python -m pytest -q` (SQLite; PG via `TEST_DATABASE_
   SQLite). Fixed with a closing `read_state` helper. Fallback path now re-takes the PG advisory lock after
   `rollback()` (409 if another worker took it). pytest PostgreSQL 207 passed; SQLite 206 passed / 1 skipped.
 
+- 2026-09-26 EST-08 backend part + app testing (Playwright, PG `vera_e2e`, scripted brain):
+  - `tests/test_conversation_dod.py`: DoD points 2–3, 5, 7–12, 14–16 through the API.
+  - Found and fixed: a message with an attachment that tells a new fact was only linking the file (fact lost);
+    facts were never ordered by date anywhere (cronología, draft numbering, CaseState) → exact dates now
+    chronological in their slots, others never move (`agent/events.timeline_order`).
+  - Regression from EST-07 seed (extra "Conversación #001" situation) broke `e2e/crud.spec.ts` numbering →
+    seed now stores a 2-turn history-only conversation on Situación #001 (D1: no facts added);
+    `POST /api/conversations` numbers "Situación #NNN" like start.py.
+  - Results: pytest SQLite 207 passed / 1 skipped, PG 209 passed; tsc ok; vitest 21; Playwright existing 2/2 and
+    an out-of-repo conversation walkthrough 1/1 (API from the browser session → Entender/Preparar/Compartir).
+  - For the teammate: message-sourced facts show the chip "Relato personal"; the snapshot label is
+    "Relato de la persona (conversación)".
+
 ## Next step
 EST-08 (#14): integration + DoD — blocked on CMP-07 (teammate). Real-provider smoke needs `ANTHROPIC_API_KEY`.

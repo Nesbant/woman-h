@@ -123,3 +123,24 @@ def update_message_event(event: dict, message_id, message_text: str, quote: str,
               "approximate_date": approximate_date, "event_time": event_time}
     quotes = list(dict.fromkeys([*(event.get("support_quotes") or []), quote]))
     return {**event, "source": source, "sources": [source], "support_quotes": quotes, **content}
+
+
+def exact_dates_in_order(events, date_of):
+    """Facts with an exact date are put in chronological order among themselves, in the slots they already
+    occupy; approximate or undated facts never move, and facts of the same day keep their order.
+    `date_of(event)` returns `(date_kind, event_date, event_time)`. Keeps the told order where no exact date exists, instead of guessing one."""
+    def exact(event):
+        kind, day, _ = date_of(event)
+        return kind == "exact" and bool(day)
+    slots = [index for index, event in enumerate(events) if exact(event)]
+    ordered = sorted((events[index] for index in slots), key=lambda event: date_of(event)[1])  # stable: same day keeps told order
+    result = list(events)
+    for index, event in zip(slots, ordered):
+        result[index] = event
+    return result
+
+
+def timeline_order(events):
+    """`exact_dates_in_order` over the timeline's own event dicts (the cronología, the draft and the share
+    selection all show facts in this order)."""
+    return exact_dates_in_order(events, lambda e: (e.get('date_kind'), e.get('event_date'), e.get('event_time')))

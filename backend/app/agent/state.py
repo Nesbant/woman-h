@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from ..models import ConversationState, RecordFile, Timeline
 from .contracts import CaseCounts, CaseState, EvidenceItem, MissingInfo, Person
-from .events import to_case_events
+from .events import exact_dates_in_order, to_case_events
 
 STATUSES = ("candidate", "confirmed", "corrected", "discarded")
 
@@ -32,13 +32,17 @@ def _evidence(files, events):
         for file in files]
 
 
+def in_date_order(events):
+    return exact_dates_in_order(events, lambda e: (e.date.date_kind, e.date.event_date, e.event_time))
+
+
 def build_case_state(db, record_id) -> CaseState:
     """Pure read: never mutates anything. `record_id` may be a `UUID` or `str`; both are used across the app.
     A case with no `Timeline` row yet (a conversation just started) has no events, no evidence and the
     `ConversationState` defaults (`goal='unspecified'`, no people, nothing missing) — never an error."""
     record_id = str(record_id)
     row = db.get(Timeline, record_id)
-    events = to_case_events(row.events) if row else []
+    events = in_date_order(to_case_events(row.events) if row else [])
     files = db.scalars(select(RecordFile).where(RecordFile.record_id == record_id)
                        .order_by(RecordFile.created_at, RecordFile.id)).all()
     conv_state = db.get(ConversationState, record_id)

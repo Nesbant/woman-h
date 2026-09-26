@@ -1,5 +1,5 @@
 """Carga explícita e idempotente; nunca cambia contraseñas de cuentas existentes."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 from uuid import NAMESPACE_URL, UUID, uuid5
 from sqlalchemy import select
@@ -61,7 +61,6 @@ def require_demo():
 
 
 MARIA_RECORD = "record:maria-situacion-001"
-MARIA_CONVERSATION_RECORD = "record:maria-conversacion-001"
 
 
 def ensure_profile(db, user_id, institution_id):
@@ -90,57 +89,29 @@ def ensure_record(db, record_id, owner_id):
 # is left as a candidate, exactly as a person exploring the conversation for the first time would leave it —
 # not everything gets confirmed right away. Reusing the relato's own wording (rather than inventing new
 # facts) is what makes this conversation "consistent with her evidence" instead of a parallel, unrelated one.
-CONVERSATION_TURNS = [
-    "A mediados de septiembre tuve una reunión con mi supervisor. Me hizo un comentario que me incomodó.",
-    "Guárdalo, quiero dejar constancia de eso.",
-    "El martes 15 por la noche recibí mensajes suyos fuera del horario laboral y luego un correo sobre mi evaluación.",
+# María's opening chat, stored as history on her Situación #001 (EST-07). Saving a conversation never
+# registers facts (decision D1): these facts are already in her relato and evidence, so no events are added.
+CONVERSATION = [
+    ("user", "A mediados de septiembre tuve una reunión con mi supervisor. Me hizo un comentario que me incomodó."),
+    ("assistant", "Gracias por contármelo. Ese hecho ya está en tu relato: lo verás en tu cronología para "
+                  "revisarlo. Nada se registra hasta que tú lo confirmes."),
+    ("user", "El martes 15 por la noche recibí mensajes suyos fuera del horario laboral."),
+    ("assistant", "Lo tengo en cuenta. En captura_01.png hay mensajes de esa noche; puedes revisar cómo quedó "
+                  "en tu cronología cuando quieras."),
 ]
 
 
-def ensure_conversation_record(db, owner_id):
-    """A second, separate private situation for María (`MARIA_CONVERSATION_RECORD`), the one the seeded chat
-    conversation lives in — deliberately apart from `MARIA_RECORD`, the account/file-driven prototype
-    narrative `test_demo_fixture_produces_sourced_events_and_review_items` and the complaint-generation tests
-    are built on. Both a case's conversation-sourced events and its extractive/AI analysis share one
-    `Timeline` row, and `timeline.merge_proposals` keeps conversation-origin candidates across reprocessing
-    (EST-02's MUST FIX, epic #5/issue #8) — so seeding a conversation directly onto `MARIA_RECORD` would
-    silently add message-sourced events to, and bump the revision of, the exact frozen fixture case those
-    tests assert on. A second case avoids that collision while still showing a real, persisted conversation
-    for the same demo person."""
-    record_id = demo_id(MARIA_CONVERSATION_RECORD)
-    if db.get(PrivateRecord, record_id) is not None:
-        return record_id
-    now = datetime.now(timezone.utc)
-    db.add(PrivateRecord(id=record_id, owner_id=owner_id, title="Conversación #001",
-                         description="Conversación iniciada desde el chat.", private_note=None,
-                         status="private_draft", created_at=now, updated_at=now))
-    db.flush()
-    return record_id
-
-
 def ensure_conversation(db, record_id):
-    """Runs María's opening conversation through the real turn orchestrator (`agent/turn.py::run_turn`) with
-    a forced `ScriptedBrain` — never the configured `CHAT_BRAIN` — so `conversation_messages`,
-    `Timeline.events` and the derived `case_state` are exactly what the real chat endpoint would have
-    produced, never a hand-built fixture that could drift from it. Idempotent and self-repairing like the
-    rest of this module: skipped entirely once this case already has any conversation history, and each
-    turn's `client_message_id` is derived deterministically from the case and turn index, so re-running
-    after a partial failure resumes instead of duplicating."""
-    from .agent.contracts import ChatTurnRequest
-    from .agent.scripted import ScriptedBrain
-    from .agent.turn import run_turn
+    """Idempotent: skipped once the case already has any conversation history. Deterministic ids and
+    increasing timestamps keep the order stable across runs."""
     if db.scalar(select(ConversationMessage).where(ConversationMessage.record_id == record_id)) is not None:
         return False
-    if db.get(Timeline, record_id) is None:
-        now = datetime.now(timezone.utc)
-        db.add(Timeline(record_id=record_id, revision=0, confirmed_revision=None, mode="empty",
-                        events=[], warnings=[], review_items=[], processed_at=now))
-        db.flush()
-    brain = ScriptedBrain()
-    for index, text in enumerate(CONVERSATION_TURNS):
-        request = ChatTurnRequest(text=text, client_message_id=demo_id(f"conversation:{record_id}:{index}"),
-                                  attachment_ids=[])
-        run_turn(db, record_id, request, brain=brain)
+    start = datetime.now(timezone.utc)
+    for index, (role, text) in enumerate(CONVERSATION):
+        db.add(ConversationMessage(id=demo_id(f"conversation:{record_id}:{index}"), record_id=record_id, role=role,
+                                   text=text, client_message_id=None, attachment_ids=[], event_ids=[],
+                                   created_at=start + timedelta(seconds=index)))
+    db.flush()
     return True
 
 
@@ -175,11 +146,10 @@ def seed_demo_case():
     with SessionLocal() as db:
         ensure_profile(db, maria, andina)
         ensure_record(db, record_id, maria)
-        conversation_record = ensure_conversation_record(db, maria)
-        db.commit()
         seed_history(db, store, andina)
-        added_conversation = ensure_conversation(db, conversation_record)
         added = attach_missing_files(db, store, record_id)
+        added_conversation = ensure_conversation(db, record_id)
+        db.commit()
     if added or added_conversation:
         print("Situación ficticia preparada para María X.")
     else:

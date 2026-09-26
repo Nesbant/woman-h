@@ -16,6 +16,8 @@ SCRIPT = json.loads((Path(__file__).parent / "demo_script.json").read_text(encod
 
 CONFIRM_PHRASES = ("guárdalo", "regístralo", "anota eso", "quiero dejar constancia", "eso también")
 DISCARD_PHRASES = ("descártalo", "no lo incluyas", "quita eso", "no lo cuentes")
+# A message that only talks about the file it carries ("subí una captura…") adds evidence, not a new fact.
+EVIDENCE_PHRASES = ("subí", "adjunto", "adjunté", "te paso", "aquí está", "acá está", "captura", "archivo", "foto")
 SHARE_PHRASES = ("vista previa", "qué se compartiría", "qué compartiría", "compartir esto", "compartir eso")
 
 
@@ -40,6 +42,10 @@ def _title_of(case_state, event_id):
     return next((event.title for event in case_state.events if event.id == event_id), None) or "ese hecho"
 
 
+def _tells_new_fact(text):
+    return literal_date(text)["date_kind"] != "unknown" or not _matches(text, EVIDENCE_PHRASES)
+
+
 class ScriptedBrain:
     """Stateless per call: everything it needs is in the `RoundContext` it receives (`mode='demo'`, as the
     contract's `BrainMode` requires for every reply this brain produces)."""
@@ -51,7 +57,9 @@ class ScriptedBrain:
             # always final; only attach_evidence may chain (one file per round, see `_finalize`).
             return self._finalize(ctx)
         if ctx.attachment_ids:
-            return self._attach(ctx)
+            # A message with a file that narrates something (or is dated) is a new fact plus its evidence: narrate first, then link the file
+            # to that new candidate (`_finalize`). Otherwise the file belongs to the most recent fact.
+            return self._narrate(ctx) if _tells_new_fact(ctx.user_text) else self._attach(ctx)
         confirm_phrase = _matches(ctx.user_text, CONFIRM_PHRASES)
         if confirm_phrase:
             return self._toward(ctx, confirm_phrase, "confirm_event", "confirm_none_open")
@@ -94,8 +102,9 @@ class ScriptedBrain:
             return self._finalize(ctx)
         if not ctx.case_state.events:
             return BrainStep(tool_call=None, reply_text=SCRIPT["attach_evidence_missing_event"])
-        target = ctx.case_state.events[-1]  # the most recently added fact: the only signal available here
-        return BrainStep(tool_call=ToolCall("attach_evidence", {"event_id": target.id, "file_id": ctx.attachment_ids[already]}))
+        created = _succeeded(ctx.round_results, "create_or_update_candidate_event")
+        target_id = created[-1].content["event_id"] if created else ctx.case_state.events[-1].id  # else the latest fact
+        return BrainStep(tool_call=ToolCall("attach_evidence", {"event_id": target_id, "file_id": ctx.attachment_ids[already]}))
 
     # --- final reply, from whatever this turn's last tool call answered -----------------------------------
 
@@ -104,6 +113,8 @@ class ScriptedBrain:
         if last.is_error:
             return BrainStep(tool_call=None, reply_text=SCRIPT["tool_error"].format(message=last.content.get("message", "")))
         if last.name == "create_or_update_candidate_event":
+            if ctx.attachment_ids:
+                return self._attach(ctx)  # the new fact came with files: link them to it
             return BrainStep(tool_call=None, reply_text=SCRIPT["narrate"].format(title=_title_of(ctx.case_state, last.content["event_id"])),
                              suggested_actions=[SuggestedAction(type="review_timeline", label="Ver este hecho en tu cronología",
                                                                 event_ids=[last.content["event_id"]])])

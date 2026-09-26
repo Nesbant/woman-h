@@ -76,7 +76,7 @@ Contraseña: el valor de `DEMO_PASSWORD` (ejemplo: `Vera-Ficticia-2026!`). Todos
 
 | Correo | Rol |
 | --- | --- |
-| maria@example.test | Persona de la demo · *Situación #001* (relato/evidencia) + *Conversación #001* (chat ya iniciado, EST-07) · perfil de Empresa Andina S.A.C. |
+| maria@example.test | Persona de la demo · *Situación #001* (relato, evidencia y una conversación inicial, EST-07) · perfil de Empresa Andina S.A.C. |
 | lucia@example.test | Revisión en Empresa Andina S.A.C. (la organización de la demo) |
 | andrea@example.test / carlos@example.test | Revisión / administración en Empresa Andina S.A.C. |
 | ana@example.test, bea@example.test | Personas sin organización (pruebas de aislamiento) |

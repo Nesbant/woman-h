@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from .accounts import AccountInput, owned_account
-from .agent.events import CONVERSATION_MODES
+from .agent.events import CONVERSATION_MODES, timeline_order
 from .config import settings
 from .db import get_db
 from .files import owned_file
@@ -52,7 +52,7 @@ def state(row, mode):
             "confirmed": bool(row and row.confirmed_revision == row.revision),
             "mode": row.mode if row else mode,
             "configured_mode": mode,
-            "events": row.events if row else [], "warnings": row.warnings if row else [],
+            "events": timeline_order(row.events) if row else [], "warnings": row.warnings if row else [],
             "review_items": (row.review_items or []) if row else [],
             "processed_at": row.processed_at.isoformat() if row else None}
 

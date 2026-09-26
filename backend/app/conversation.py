@@ -26,7 +26,7 @@ def start_conversation(user: User = Depends(current_user), db: Session = Depends
     naming it from what the person actually said is future work, not part of this epic's scope."""
     now = datetime.now(timezone.utc)
     count = db.scalar(select(func.count()).select_from(PrivateRecord).where(PrivateRecord.owner_id == user.id))
-    record = add_record(db, user, RecordInput(title=f"Conversación #{count + 1:03d}",
+    record = add_record(db, user, RecordInput(title=f"Situación #{count + 1:03d}",
                                               description="Conversación iniciada desde el chat."))
     # Started empty so the person can add facts (manual events, later tool calls) without an "analyze" step first.
     db.add(Timeline(record_id=record.id, revision=0, confirmed_revision=None, mode="empty",

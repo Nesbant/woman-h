@@ -125,3 +125,13 @@ def test_model_inference_event_can_be_accepted_once_actually_reviewed():
     reviewed = base_event(mode="extractive", status="accepted", reviewed=True)
     case_event = to_case_event(reviewed)
     assert case_event.origin == "model_inference" and case_event.status == "confirmed"
+
+
+def test_timeline_order_sorts_exact_dates_in_place_and_never_moves_the_rest():
+    from app.agent.events import timeline_order
+    events = [{"id": "approx", "date_kind": "approximate", "event_date": None},
+              {"id": "mar3", "date_kind": "exact", "event_date": "2026-03-03"},
+              {"id": "unknown", "date_kind": "unknown", "event_date": None},
+              {"id": "mar1", "date_kind": "exact", "event_date": "2026-03-01"},
+              {"id": "mar1-later", "date_kind": "exact", "event_date": "2026-03-01"}]
+    assert [e["id"] for e in timeline_order(events)] == ["approx", "mar1", "unknown", "mar1-later", "mar3"]
