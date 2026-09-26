@@ -11,7 +11,18 @@ correct for a single Python process, which is what the test suite and a one-work
 multi-process PostgreSQL deployment additionally takes a transaction-scoped advisory lock
 (`pg_try_advisory_xact_lock`, released automatically at commit/rollback) keyed by the same case id, so two
 different worker processes serialize the same way; on SQLite `_advisory_lock` is a no-op (always granted),
-since SQLite has no such mechanism and, being single-process here, does not need one."""
+since SQLite has no such mechanism and, being single-process here, does not need one.
+
+EST-05 (issue #11): when the configured brain is `claude` and it raises `agent/llm.py::BrainError` on any
+round (missing key, a typed SDK error, a `refusal`/`max_tokens` stop, a judgment-language reply, ...),
+`_claude_or_fallback` rolls the whole attempted turn back — discarding any tool-call mutations that
+provider's earlier rounds already made in memory this turn, exactly like a normal exception would have to —
+and reruns it from scratch with a fresh `ScriptedBrain`, so the person always gets `mode: "demo"` and never a
+5xx or a half-written turn. Known limitation: on PostgreSQL, `db.rollback()` ends the transaction that held
+`_advisory_lock`'s advisory lock; the fallback attempt runs without it (the in-process `threading.Lock` still
+serializes this case for the whole request either way, so this only matters for true multi-process races
+during the rare fallback path itself)."""
+import logging
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -22,6 +33,8 @@ from sqlalchemy.orm import Session
 from ..models import ConversationMessage, Timeline
 from .brain import BrainStep, RoundContext, RoundResult, get_brain
 from .contracts import ChatMessage, ChatTurnRequest, ChatTurnResponse
+from .llm import BrainError
+from .scripted import ScriptedBrain
 from .state import build_case_state
 from .tools import ToolContext, execute
 
@@ -30,6 +43,7 @@ CONTEXT_MESSAGES = 20
 REPLY_SUFFIX = "::reply"
 BUSY = "Ya hay un mensaje en proceso para este caso. Espera un momento e inténtalo de nuevo."
 ROUND_LIMIT_TEXT = "Avancé lo que pude con esto. Cuéntame si falta algo y seguimos."
+logger = logging.getLogger(__name__)
 
 _case_locks: dict[str, threading.Lock] = {}
 _registry_lock = threading.Lock()
@@ -140,6 +154,24 @@ def _response(db: Session, record_id: str, user_row, reply_row, mode, suggested_
                             case_state=build_case_state(db, record_id), mode=mode)
 
 
+def _claude_or_fallback(db: Session, record_id: str, data: ChatTurnRequest, existing_user, brain):
+    """Runs this turn's brain loop; on `BrainError` (see the module docstring), discards everything this
+    attempt staged and reruns the whole turn with a fresh `ScriptedBrain`. Returns `(user_row, step, touched,
+    mode)` — a fresh `user_row` too, since a rollback expires (and, if it was only flushed and never
+    committed by this attempt, discards) the one already saved."""
+    user_row = existing_user or _save_user_message(db, record_id, data)
+    try:
+        step, touched = _run_brain(brain, db, record_id, user_row)
+        return user_row, step, touched, brain.mode
+    except BrainError as error:
+        logger.warning("%s failed this turn (%s); falling back to ScriptedBrain", type(brain).__name__, error)
+        db.rollback()
+        fallback = ScriptedBrain()
+        user_row = existing_user or _save_user_message(db, record_id, data)
+        step, touched = _run_brain(fallback, db, record_id, user_row)
+        return user_row, step, touched, fallback.mode
+
+
 def run_turn(db: Session, record_id: str, data: ChatTurnRequest) -> ChatTurnResponse:
     """The whole per-record, idempotent, tool-using turn described in the module docstring. Commits exactly
     once, after every tool call in this turn's loop already succeeded (or the brain's final step needed no
@@ -157,8 +189,7 @@ def run_turn(db: Session, record_id: str, data: ChatTurnRequest) -> ChatTurnResp
         if existing_user is not None and existing_reply is not None:
             return _response(db, record_id, existing_user, existing_reply, brain.mode)
 
-        user_row = existing_user or _save_user_message(db, record_id, data)
-        step, touched = _run_brain(brain, db, record_id, user_row)
+        user_row, step, touched, mode = _claude_or_fallback(db, record_id, data, existing_user, brain)
         reply_row = _save_reply(db, record_id, data, step, touched)
         db.commit()
-        return _response(db, record_id, user_row, reply_row, brain.mode, step.suggested_actions)
+        return _response(db, record_id, user_row, reply_row, mode, step.suggested_actions)

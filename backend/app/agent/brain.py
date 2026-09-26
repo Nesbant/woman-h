@@ -53,11 +53,16 @@ class AgentBrain(Protocol):
 
 
 def get_brain(name: str | None = None) -> AgentBrain:
-    """Factory by `CHAT_BRAIN` (`config.py`); `scripted` is the only brain implemented so far (EST-04).
-    EST-05 adds `claude` here without changing this signature, this factory's shape, or the default."""
+    """Factory by `CHAT_BRAIN` (`config.py`). `claude` (EST-05, `agent/llm.py::ClaudeBrain`) is the real
+    provider brain; `turn.py` falls back to a fresh `ScriptedBrain` for the whole turn if it ever raises
+    `agent/llm.py::BrainError` (missing key, any typed SDK error, a refusal/max_tokens stop, or a reply that
+    failed the judgment-language guardrail) — never a 5xx, never a half-written turn."""
     from ..config import settings
     chosen = name or settings().chat_brain
     if chosen == "scripted":
         from .scripted import ScriptedBrain
         return ScriptedBrain()
+    if chosen == "claude":
+        from .llm import ClaudeBrain
+        return ClaudeBrain()
     raise ValueError(f"CHAT_BRAIN desconocido: {chosen!r}")

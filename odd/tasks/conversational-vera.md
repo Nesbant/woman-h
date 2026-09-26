@@ -30,7 +30,7 @@ Runners: `backend/.venv/bin/python -m pytest -q` (SQLite; PG via `TEST_DATABASE_
 - [x] EST-02 (#8) Typed event ⇄ timeline dict, origin, `message` source, `merge_proposals` keeps conversation events
 - [x] EST-03 (#9) Validated tool executor (6 tools, strict schemas) + `state.build_case_state`
 - [x] EST-04 (#10) Turn orchestrator + ScriptedBrain, real messages/state endpoints, idempotency, 409
-- [ ] EST-05 (#11) Claude brain (anthropic SDK, strict tools, caching, structured output, fallback to scripted)
+- [x] EST-05 (#11) Claude brain (anthropic SDK, strict tools, caching, structured output, fallback to scripted)
 - [x] EST-06 (#12) `prepare_share_preview` never submits
 - [ ] EST-07 (#13) Seed conversation, safety tests (both brains), README/SPEC
 - [ ] EST-08 (#14) Integration + DoD — blocked on CMP-07
@@ -140,9 +140,73 @@ Runners: `backend/.venv/bin/python -m pytest -q` (SQLite; PG via `TEST_DATABASE_
   regressions). Full suite PostgreSQL: not run this session (Docker Desktop / `woman-h-db-1` still
   unreachable) — recorded as pending, same as EST-04. No `agent/contracts.py` changes.
 
+- EST-05 done: `agent/llm.py::ClaudeBrain` (new) — one Anthropic API call per round (`next_step` stays the
+  brain-agnostic per-round contract EST-04 froze), fully stateless across calls: it rebuilds the whole
+  conversation from `RoundContext` every time, reconstructing this turn's own already-run tool calls as
+  synthetic `tool_use`/`tool_result` exchanges (`round-{i}` placeholder ids — no real id is available or
+  needed across separate calls). `agent/prompt.py` (new): the frozen `SYSTEM_PROMPT` (principles, tool-use
+  rules, registration/discard phrases, evidence-is-untrusted-text), never interpolated with anything —
+  `cache_control: {"type": "ephemeral"}` on its one block caches it together with every tool definition
+  (`tools` render before `system` on the wire, so one breakpoint covers both), since neither ever changes
+  between requests, turns or cases; the derived `CaseState` and this turn's `attachment_ids` go in the
+  turn's own message instead (`agent/llm.py::_current_message`), exactly as the epic specifies, precisely so
+  `system`/`tools` can stay byte-identical and cacheable. Final replies use `output_config.format` (a
+  `reply_text` + `suggested_actions` JSON schema mirroring `contracts.SuggestedAction`) alongside the six
+  `strict` tools — `stop_reason` is checked before anything else (`refusal`/`max_tokens`/`tool_use` handled
+  explicitly; anything else must carry a text block or it is treated as an error too), and every reply
+  (`reply_text` and every suggested action's `label`) is checked against `proposals.FORBIDDEN` (SPEC §15)
+  before it can reach the person.
+
+  **Model choice**: the issue's `claude-opus-5` is not a real model id (the environment's actually-valid
+  current ids are `claude-opus-5-5` and `claude-sonnet-5`, per the loaded `claude-api` skill). Chose
+  `claude-sonnet-5` as `CHAT_MODEL`'s default: this is a chat/tool-calling workload (short replies, at most a
+  couple of small tool calls a turn), which the skill's own cost guidance says rarely benefits from an
+  Opus-tier model, and a single model per deployment keeps the whole prompt-caching story simple (a
+  multi-model cascade would forfeit cache reuse across models, and caches are model-scoped anyway).
+  `CHAT_EFFORT` defaults to `"low"` for the same reason (`output_config.effort`, no thinking budget config
+  needed — Sonnet 5 runs adaptive thinking by default either way).
+
+  **Fallback** (`agent/llm.py::BrainError` + `agent/turn.py::_claude_or_fallback`, new): any typed
+  `anthropic.APIError` (network, 4xx, 5xx — all typed SDK errors share this one Python base class), a
+  missing `ANTHROPIC_API_KEY`, `stop_reason in {"refusal", "max_tokens"}`, unparseable/schema-invalid
+  structured output, or a judgment-language reply, all raise `BrainError`. `turn.py` catches it once for the
+  whole turn (not per round): rolls back everything that attempt staged in this same still-uncommitted
+  transaction (any tool-call mutations from earlier rounds of the *same* failed attempt included — the
+  existing one-commit-per-turn design from EST-04 makes this a clean, atomic redo, not a partial one) and
+  reruns the turn from scratch with a fresh `ScriptedBrain`, so the person always gets `mode: "demo"` and the
+  endpoint never answers with a 5xx or a half-written turn. Noted as a known, untested limitation:
+  `db.rollback()` also ends the PostgreSQL transaction holding `_advisory_lock`'s advisory lock, so a
+  multi-process race during the fallback path itself is not fully closed (the in-process `threading.Lock`
+  still serializes this one case for the whole request regardless).
+
+  `anthropic==1.8.0` installed into `backend/.venv` and added to `requirements.txt`; its 6 new transitive
+  dependencies (`docstring_parser`, `httpcore2`, `httpx2`, `jiter`, `sniffio`, `truststore` — `anthropic` 1.x
+  is built on `httpx2`, a separate package from the existing `httpx`) added to `requirements.lock.txt` in
+  the file's existing alphabetical order; `pip freeze` and the lock file verified byte-identical after every
+  edit. `config.py`: `anthropic_api_key: str | None`, `chat_model: str = "claude-sonnet-5"`,
+  `chat_effort: Literal[...] = "low"` (existing `chat_brain` already had the `"claude"` branch wired in
+  `agent/brain.py::get_brain()`, completed here). `.env.example`: all three documented, plus a note that
+  `CHAT_BRAIN=claude` sends every chat message to Anthropic.
+
+  `pytest tests/test_agent_llm.py` (new, a **fake** Anthropic client — no network, no real key): 4 passed —
+  the happy path reaches `mode: "ai"` through the full EST-04 flow (narrate → candidate → "guárdalo" →
+  confirmed) across 2 turns / 4 API calls, asserting `system` (with its `cache_control` breakpoint) and
+  `tools` are byte-identical across all 4 — the exact condition needed for `cache_read_input_tokens > 0` from
+  the second call on in the real API, which this sandboxed test cannot itself produce (no key, no network);
+  a missing key and a raised `anthropic.APIConnectionError` each fall back to `mode: "demo"` with HTTP 200;
+  a fake reply containing judgment language (`"...no es creíble... probabilidad de sanción"`) never reaches
+  the person — the turn reruns with `ScriptedBrain` instead. `pytest tests/test_agent_share.py
+  tests/test_agent_llm.py tests/test_conversation_turn.py tests/test_agent_tools.py`: 38 passed. Full suite
+  SQLite: 203 passed / 1 skipped (baseline 199/1; +4, no regressions). Full suite PostgreSQL: not run this
+  session (Docker Desktop / `woman-h-db-1` still unreachable) — recorded as pending, same as EST-04/EST-06.
+  No `agent/contracts.py` changes; no new migration (no model changes).
+
+  **Manual curl smoke** (no `ANTHROPIC_API_KEY` in the environment, so a real-provider smoke is not
+  possible): uvicorn on a free local port, a fresh SQLite temp DB (`alembic upgrade head` + `seed()`),
+  `CHAT_BRAIN=claude` and an empty `ANTHROPIC_API_KEY` — logged in as the seeded `maria@example.test`,
+  started a conversation, sent one message: `HTTP_STATUS=200`, response body `"mode":"demo"`, a `candidate`
+  event was created by `ScriptedBrain` exactly as EST-04 already does — proving the fallback with no 5xx.
+  Server stopped afterward; temp DB directory removed.
+
 ## Next step
-EST-05 (#11): Claude brain (anthropic SDK, strict tools, prompt caching, structured output, automatic fallback
-to `ScriptedBrain` on any typed SDK error) — `get_brain()` already has the `"claude"` branch reserved in its
-factory signature, `agent/tools.py`'s `TOOL_SCHEMAS` are already `strict`-shaped for the Anthropic API, and
-`agent/brain.py`'s `RoundContext`/`BrainStep` are already brain-agnostic, so EST-05 should not need to change
-any of EST-03/EST-04's shapes.
+EST-07 (#13): seed conversation data, safety tests covering both brains, README/SPEC updates.

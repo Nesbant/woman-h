@@ -28,6 +28,17 @@ class Settings(BaseSettings):
     # EST-04 (epic #5): which `AgentBrain` answers the conversation. `scripted` is the only one that exists
     # yet (`agent/scripted.py`); `claude` is EST-05's real provider brain, added without changing this default.
     chat_brain: Literal["scripted", "claude"] = "scripted"
+    # EST-05 (issue #11): `agent/llm.py::ClaudeBrain`. `claude-sonnet-5` is the current-generation, cost-
+    # efficient model for a conversational tool-calling workload like this one (per the Anthropic API
+    # guidance: chat/classification-shaped work rarely benefits from an Opus-tier model, and one model per
+    # deployment keeps prompt caching effective — a cascade of models forfeits cache reuse across them). The
+    # issue's `claude-opus-5` guess is not a real model id and `chat_effort` defaults to `"low"` for the same
+    # reason (chat replies over a handful of small tool calls, not long-horizon agentic work). No key means
+    # `ClaudeBrain` never even tries the network; the turn orchestrator (`agent/turn.py`) falls back to
+    # `ScriptedBrain` for that turn instead of failing the request.
+    anthropic_api_key: str | None = None
+    chat_model: str = "claude-sonnet-5"
+    chat_effort: Literal["low", "medium", "high", "xhigh", "max"] = "low"
 
     @model_validator(mode="after")
     def validate_environment(self):
