@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { api, ApiError } from './api'
 import type { User } from './api'
 import { clearStartDraft, navigate, PrivateWorkspace, useRoute } from './Home'
+import { Institutional } from './Institutional'
 
 type Context = { name: string; role?: 'admin' | 'reviewer'; case_access?: boolean }
 const roles = { admin: 'Administración institucional', reviewer: 'Revisión institucional' }
@@ -75,14 +76,14 @@ export function App() {
           <form onSubmit={login}><label htmlFor="email">Correo electrónico</label><input id="email" type="email" autoComplete="username" required maxLength={254} value={email} onChange={e => setEmail(e.target.value)} />
             <label htmlFor="password">Contraseña</label><input id="password" type="password" autoComplete="current-password" required maxLength={256} value={password} onChange={e => setPassword(e.target.value)} />
             {error && <p role="alert" className="error">{error}</p>}<button disabled={busy}>{busy ? 'Ingresando…' : 'Ingresar a mi espacio'}</button></form>
-          <p className="small">Puedes crear y consultar registros privados. Los envíos institucionales todavía no están habilitados.</p>
+          <p className="small">Tus registros son privados hasta que decidas compartirlos.</p>
         </section>
       </div> : <>
         {error && <p role="alert" className="error">{error}</p>}
-        {context && space !== 'private' ? <section className="card space"><p className="eyebrow">ACCESO VERIFICADO</p><h2>{context.name}</h2>
-          <p>{space === 'private' ? 'Solo tu cuenta puede acceder a este espacio. Los roles institucionales no conceden acceso a espacios privados ajenos.' : `${roles[context.role!]} · La pertenencia a una institución no concede acceso a expedientes.`}</p>
-          {space !== 'private' && <div className="notice"><strong>Espacio institucional</strong><p>Los registros personales son privados. Los expedientes, archivos, análisis con IA y envíos se implementarán en las siguientes etapas.</p></div>}
-        </section> : !context && !error && <p role="status">Preparando tu espacio privado…</p>}
+        {context && space !== 'private' ? <>
+          <p className="small role-line">{roles[context.role!]} · La pertenencia a una organización no concede acceso a espacios privados.</p>
+          <Institutional key={space} institutionId={space} name={context.name} userId={user.id} onExpired={sessionExpired} /></>
+          : !context && !error && <p role="status">Preparando tu espacio privado…</p>}
         {context && space === 'private' && <PrivateWorkspace key={user.id} userId={user.id} route={route} onExpired={sessionExpired} />}
       </>}
     </main><footer>VERA · Tú mantienes el control de lo que compartes.</footer>

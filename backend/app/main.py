@@ -17,6 +17,8 @@ from .accounts import router as accounts_router
 from .files import router as files_router
 from .start import router as start_router
 from .timeline import router as timeline_router
+from .complaints import organizations as organizations_router, router as complaints_router
+from .institutional import router as institutional_router
 
 config = settings()
 app = FastAPI(title="VERA · API", docs_url="/api/docs" if config.app_env != "production" else None, redoc_url=None)
@@ -25,6 +27,9 @@ app.include_router(accounts_router)
 app.include_router(files_router)
 app.include_router(start_router)
 app.include_router(timeline_router)
+app.include_router(complaints_router)
+app.include_router(organizations_router)
+app.include_router(institutional_router)
 app.add_middleware(CORSMiddleware, allow_origins=config.allowed_origins,
                    allow_credentials=True, allow_methods=["GET", "POST", "PUT", "DELETE"],
                    allow_headers=["Content-Type", "X-VERA-Request"])

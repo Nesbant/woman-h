@@ -6,6 +6,7 @@ import type { PrivateRecord } from './Records'
 import { VoiceCapture } from './VoiceCapture'
 import { AttachmentStep } from './AttachmentStep'
 import { Timeline } from './Timeline'
+import { Complaint, Share } from './Complaint'
 
 const draftKey = (userId: string) => `vera:start:${userId}`
 type Draft = { entry_id: string; text: string; voice?: boolean }
@@ -136,6 +137,9 @@ export function PrivateWorkspace({ userId, route, onExpired }: {userId: string; 
   const draft = useDraft(userId)
   const timeline = /^registros\/([^/]+)\/cronologia$/.exec(route)
   if (timeline) return <Timeline key={timeline[1]} recordId={timeline[1]} onExpired={onExpired} />
+  const complaint = /^registros\/([^/]+)\/(queja|compartir)$/.exec(route)
+  if (complaint) return complaint[2] === 'queja' ? <Complaint key={complaint[1]} recordId={complaint[1]} onExpired={onExpired} />
+    : <Share key={complaint[1]} recordId={complaint[1]} onExpired={onExpired} />
   const step = /^registros\/([^/]+)\/(archivos|relato)$/.exec(route)
   if (step) return <AttachmentStep key={step[1]} recordId={step[1]} relato={step[2] === 'relato'} onExpired={onExpired} />
   if (route === 'registros' || route.startsWith('registros/')) {

@@ -1,0 +1,54 @@
+{
+  "events": [
+    {
+      "description": "Reunión presencial a solas con el supervisor en la sala 3. La persona describe comentarios sobre su apariencia y una invitación a cenar que rechazó.",
+      "date_kind": "approximate",
+      "event_date": null,
+      "approximate_date": "mediados de septiembre de 2026",
+      "source_ids": [],
+      "support_quotes": [
+        "tuve una reunión presencial a solas con mi supervisor, Julio Ramírez, en la sala 3",
+        "hizo comentarios sobre mi apariencia que me incomodaron y me pidió que lo acompañara a cenar",
+        "Le dije que no."
+      ]
+    },
+    {
+      "description": "Mensaje de WhatsApp recibido a las 22:43 insistiendo sobre la cena.",
+      "date_kind": "exact",
+      "event_date": "2026-09-16",
+      "approximate_date": null,
+      "source_ids": [],
+      "support_quotes": ["Mensaje recibido el 16/09/2026 a las 22:43", "¿Ya pensaste lo de la cena?"]
+    },
+    {
+      "description": "Correo del supervisor que comunica un cambio al turno de noche.",
+      "date_kind": "exact",
+      "event_date": "2026-09-17",
+      "approximate_date": null,
+      "source_ids": [],
+      "support_quotes": ["Fecha: 17/09/2026 09:12", "A partir de la próxima semana pasas al turno de noche."]
+    },
+    {
+      "description": "La persona describe un cambio de turno sin explicación y nerviosismo al ir a la oficina.",
+      "date_kind": "approximate",
+      "event_date": null,
+      "approximate_date": "unos días después de la reunión",
+      "source_ids": [],
+      "support_quotes": ["Unos días después me cambiaron el turno sin explicación.", "Desde entonces me siento nerviosa al ir a la oficina."]
+    }
+  ],
+  "review_items": [
+    {
+      "kind": "date_inconsistency",
+      "message": "El relato menciona el martes 15, pero la captura indica el miércoles 16/09/2026.",
+      "source_ids": [],
+      "support_quotes": ["El martes 15 me escribió por WhatsApp de noche insistiendo.", "Mensaje recibido el 16/09/2026 a las 22:43"]
+    },
+    {
+      "kind": "possible_relation",
+      "message": "El correo menciona una reunión que podría ser la misma descrita en tu relato.",
+      "source_ids": [],
+      "support_quotes": ["Como conversamos en la reunión de la semana pasada", "tuve una reunión presencial a solas con mi supervisor"]
+    }
+  ]
+}

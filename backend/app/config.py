@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, ge=1024, le=100 * 1024 * 1024)
     max_image_pixels: int = Field(default=25_000_000, ge=1, le=100_000_000)
     max_pdf_pages: int = Field(default=200, ge=1, le=1000)
-    timeline_ai_factory: str = "app.timeline_ai:DemoAdapter"
+    timeline_ai_factory: str = "app.timeline_ai:FixtureAdapter"
     timeline_ai_url: str | None = None
     timeline_ai_key: str | None = None
 

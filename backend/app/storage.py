@@ -18,7 +18,7 @@ class LocalStorage:
         self.root = config.storage_root.resolve()
 
     def path(self, key: str) -> Path:
-        if not re.fullmatch(r"(?:originals|previews)/[a-f0-9]{32}", key):
+        if not re.fullmatch(r"(?:originals|previews|cases)/[a-f0-9]{32}", key):
             raise ValueError("Clave de almacenamiento inválida")
         path = (self.root / key).resolve()
         if not path.is_relative_to(self.root):

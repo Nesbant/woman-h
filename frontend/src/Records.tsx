@@ -92,7 +92,8 @@ function RecordDetail({ id, onExpired, onBack }: Props & { id: string; onBack: (
         <h3>Descripción inicial</h3><p className="record-description">{data.description}</p>
         <p className="notice">Este registro es privado. No se ha generado ningún reporte institucional.</p>
         <button onClick={() => { setSaved(false); setEditing(true) }}>Editar registro</button>
-        <p><a href={`#/registros/${id}/cronologia`}>Revisar cronología privada</a></p>
+        <p><a href={`#/registros/${id}/cronologia`}>Entender lo ocurrido · cronología privada</a></p>
+        <p><a href={`#/registros/${id}/queja`}>Preparar reporte</a></p>
       </article>}
     {data && !error && <Accounts key={`accounts-${id}`} recordId={id} onExpired={onExpired} />}
     {data && !error && <Files key={`files-${id}`} recordId={id} onExpired={onExpired} />}
