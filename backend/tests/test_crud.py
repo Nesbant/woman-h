@@ -44,7 +44,9 @@ def test_deleting_a_situation_removes_everything_private(client, demo_record, st
     assert keys and all(store.read(key) for key in keys)
     assert client.delete(f"/api/records/{demo_record}").status_code == 204
     assert client.get(f"/api/records/{demo_record}/overview").status_code == 404
-    assert [r["id"] for r in client.get("/api/records").json()] == []
+    # María also owns a second, separate seeded case (EST-07's conversation record) that this delete must
+    # never touch — so this only asserts the deleted one is gone, not that the list is now empty.
+    assert demo_record not in [r["id"] for r in client.get("/api/records").json()]
     with SessionLocal() as db:
         for model in (Account, RecordFile, Timeline, ComplaintDraft, RecordSubmission):
             assert count(db, model, record_id=demo_record) == 0, model.__name__

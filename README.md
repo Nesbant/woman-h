@@ -60,9 +60,15 @@ Pruebas: `cd backend && ../.venv/bin/python -m pytest -q` y `cd frontend && npm 
 | `MAX_UPLOAD_BYTES`, `MAX_IMAGE_PIXELS`, `MAX_PDF_PAGES` | Límites de archivos |
 | `TIMELINE_AI_FACTORY` | `app.timeline_ai:FixtureAdapter` (defecto) o `app.timeline_ai:HttpAdapter` |
 | `TIMELINE_AI_URL` / `TIMELINE_AI_KEY` | Endpoint HTTPS del proveedor para `HttpAdapter` |
+| `CHAT_BRAIN` | Cerebro de la conversación (epic #5): `scripted` (defecto) o `claude` — ver aviso abajo |
+| `ANTHROPIC_API_KEY` | Obligatoria solo con `CHAT_BRAIN=claude` |
+| `CHAT_MODEL` | Modelo de Anthropic para `CHAT_BRAIN=claude` (defecto `claude-sonnet-5`) |
+| `CHAT_EFFORT` | Esfuerzo de razonamiento (`low`…`max`, defecto `low`) para `CHAT_BRAIN=claude` |
 | `API_PROXY_TARGET` | En `frontend/.env`: destino del proxy de Vite |
 
-**Fallback de IA:** siempre se intenta *adaptador configurado → `backend/app/demo_fixture.json` → selección extractiva*. Todo lo propuesto se verifica en el servidor: cada evento debe citar fuentes existentes con citas literales; fechas exactas sin respaldo quedan "pendientes de confirmar"; puntajes, culpabilidad, credibilidad o sanciones se descartan.
+**Fallback de IA (cronología):** siempre se intenta *adaptador configurado → `backend/app/demo_fixture.json` → selección extractiva*. Todo lo propuesto se verifica en el servidor: cada evento debe citar fuentes existentes con citas literales; fechas exactas sin respaldo quedan "pendientes de confirmar"; puntajes, culpabilidad, credibilidad o sanciones se descartan.
+
+**Conversación con VERA — modo demo vs. proveedor real:** con `CHAT_BRAIN=scripted` (defecto), la conversación corre siempre en `mode: "demo"`, con un guion determinístico (`app/agent/scripted.py`) que no llama a ningún servicio externo. **Con `CHAT_BRAIN=claude`, cada mensaje que la persona escribe en el chat viaja a la API de Anthropic** (proveedor externo) para producir la respuesta y decidir qué herramienta llamar; requiere `ANTHROPIC_API_KEY`. Si falta la clave, el proveedor falla, se corta por `refusal`/`max_tokens`, devuelve una salida inválida o su respuesta usa lenguaje de juicio (SPEC §15), el turno completo se reintenta con `ScriptedBrain` y responde igual en `mode: "demo"` — nunca con un error 5xx ni un turno a medio guardar. Ninguna herramienta de la conversación envía nada ni crea un caso institucional por sí sola, sea cual sea el cerebro activo (ver SPEC, sección "VERA conversacional").
 
 ## Cuentas demo
 
@@ -70,7 +76,7 @@ Contraseña: el valor de `DEMO_PASSWORD` (ejemplo: `Vera-Ficticia-2026!`). Todos
 
 | Correo | Rol |
 | --- | --- |
-| maria@example.test | Persona de la demo · *Situación #001* · perfil de Empresa Andina S.A.C. |
+| maria@example.test | Persona de la demo · *Situación #001* (relato/evidencia) + *Conversación #001* (chat ya iniciado, EST-07) · perfil de Empresa Andina S.A.C. |
 | lucia@example.test | Revisión en Empresa Andina S.A.C. (la organización de la demo) |
 | andrea@example.test / carlos@example.test | Revisión / administración en Empresa Andina S.A.C. |
 | ana@example.test, bea@example.test | Personas sin organización (pruebas de aislamiento) |

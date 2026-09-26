@@ -211,3 +211,34 @@ def test_demo_seed_repairs_a_partially_created_case(store, monkeypatch):
     with SessionLocal() as db:
         names = sorted(db.scalars(select(RecordFile.filename).where(RecordFile.record_id == record)))
     assert names == ["captura_01.png", "captura_02.png", "correo_01.pdf"]
+
+
+def test_demo_seed_conversation_is_idempotent(store):
+    """EST-07 (issue #13): María's seeded conversation (`app.seed.ensure_conversation`) runs through the real
+    turn orchestrator, which must never be re-run once it already happened — `python -m app.seed` twice in a
+    row (this test's equivalent: `seed_demo_case()` twice) must leave the exact same `conversation_messages`
+    and `Timeline.events`, not duplicates from a second pass through `run_turn`. It lives on its own record
+    (`MARIA_CONVERSATION_RECORD`), separate from `demo_record`/`MARIA_RECORD`, so it never changes what the
+    `demo_record`-based fixture/timeline tests above see."""
+    from sqlalchemy import select
+    from app.db import SessionLocal
+    from app.models import ConversationMessage, Timeline
+    from app.seed import MARIA_CONVERSATION_RECORD, demo_id, seed_demo_case
+
+    seed_demo_case()
+    record = demo_id(MARIA_CONVERSATION_RECORD)
+    with SessionLocal() as db:
+        messages_first = sorted(db.scalars(select(ConversationMessage.id)
+                                           .where(ConversationMessage.record_id == record)))
+        events_first = db.get(Timeline, record).events
+
+    seed_demo_case()
+    with SessionLocal() as db:
+        messages_second = sorted(db.scalars(select(ConversationMessage.id)
+                                            .where(ConversationMessage.record_id == record)))
+        events_second = db.get(Timeline, record).events
+
+    assert messages_first == messages_second  # same ids, not duplicated rows
+    assert len(messages_first) == 6  # 3 seeded turns: user + assistant reply each
+    assert events_first == events_second
+    assert [event["status"] for event in events_second] == ["accepted", "proposed"]

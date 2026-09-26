@@ -172,18 +172,24 @@ def _claude_or_fallback(db: Session, record_id: str, data: ChatTurnRequest, exis
         return user_row, step, touched, fallback.mode
 
 
-def run_turn(db: Session, record_id: str, data: ChatTurnRequest) -> ChatTurnResponse:
+def run_turn(db: Session, record_id: str, data: ChatTurnRequest, brain=None) -> ChatTurnResponse:
     """The whole per-record, idempotent, tool-using turn described in the module docstring. Commits exactly
     once, after every tool call in this turn's loop already succeeded (or the brain's final step needed no
     tool at all) — a per-case lock during the whole call is what makes that single commit race-free without
     needing a client-supplied revision, unlike the plain HTTP timeline endpoints.
+
+    `brain` defaults to `get_brain()` (the configured `CHAT_BRAIN`), exactly as before this parameter existed
+    — every HTTP call site keeps passing none. EST-07 (issue #13) added the parameter only so the demo seed
+    (`app/seed.py::ensure_conversation`) can force a fresh `ScriptedBrain` for María's seeded conversation
+    regardless of whatever `CHAT_BRAIN` the environment has configured (so seeding never depends on, or
+    silently calls, a real provider).
 
     Idempotency note: replaying a `client_message_id` returns the exact same persisted `user_message`,
     `assistant_message` text and `event_ids`, and a `case_state` re-derived from that same persisted data —
     everything that actually changed the case. `suggested_actions` is the one field this does not replay
     (it is never persisted, being a transient per-turn UI hint); a retried request gets an empty list for it
     instead of the original one."""
-    brain = get_brain()
+    brain = brain or get_brain()
     with _locked_turn(db, record_id):
         existing_user, existing_reply = _existing_turn(db, record_id, data)
         if existing_user is not None and existing_reply is not None:
