@@ -37,6 +37,15 @@ class ItemReview(Revision):
     status: Literal["open", "resolved", "dismissed"]
 
 
+class ManualEvent(AccountInput):
+    """A fact the person adds themselves (decision D2). Dates follow the same exact/approximate/unknown rules."""
+    revision: int = Field(ge=0)
+    title: str = Field(min_length=1, max_length=200)
+
+
+PERSON = "person"
+
+
 def state(row, mode):
     return {"revision": row.revision if row else 0,
             "confirmed": bool(row and row.confirmed_revision == row.revision),
@@ -59,6 +68,26 @@ def lock(db, record_id, user, revision):
 
 def event_sources(event):
     return event.get('sources') or [event['source']]
+
+
+def is_manual(event):
+    return event.get('mode') == PERSON
+
+
+def person_source(event_id, content):
+    """The person is the source of what they add: no quote to verify, nothing proposed by VERA."""
+    return {"id": f"manual:{event_id}", "kind": PERSON, "source_id": event_id, "label": "Agregado por ti",
+            "quote": content['description'], "page": None, "version": None, "field": None,
+            "date": {key: content[key] for key in ('date_kind', 'event_date', 'approximate_date')}}
+
+
+def manual_event(data):
+    content = {**data.model_dump(mode='json', include={'description', 'date_kind', 'event_date', 'approximate_date'}),
+               "title": data.title, "event_time": None}
+    event_id = str(uuid4())
+    source = person_source(event_id, content)
+    return {"id": event_id, "source": source, "sources": [source], "support_quotes": [], "original": dict(content), **content,
+            "status": "accepted", "reviewed": True, "edited": False, "needs_review": False, "mode": PERSON}
 
 
 def find_event(events, event_id):
@@ -193,7 +222,37 @@ def review(record_id: UUID, event_id: UUID, data: Review, user: User = Depends(c
     event = find_event(events, event_id)
     content = reviewed_content(data, event)
     event.update(content, status=data.status, reviewed=True, edited=is_edited(content, event['original']))
+    if is_manual(event):
+        event['source'] = person_source(event['id'], content)
+        event['sources'] = [event['source']]
     row.events = events
+    bump(row, db)
+    return state(row, row.mode)
+
+
+@router.post("/events", status_code=201)
+def add_event(record_id: UUID, data: ManualEvent, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    row = lock(db, record_id, user, data.revision)
+    if row is None:
+        raise HTTPException(409, "Primero deja que VERA organice tus fuentes; luego podrás agregar hechos propios")
+    row.events = [*deepcopy(row.events), manual_event(data)]
+    bump(row, db)
+    return state(row, row.mode)
+
+
+def without_event(items, event_id):
+    return [{**item, "event_ids": [value for value in item.get('event_ids', []) if value != event_id]} for item in items]
+
+
+@router.delete("/events/{event_id}")
+def remove_event(record_id: UUID, event_id: UUID, revision: int, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    row = lock(db, record_id, user, revision)
+    event = find_event(row.events if row else [], event_id)
+    if not is_manual(event):
+        # Proposals stay in the timeline as discarded, so the review trail is never rewritten.
+        raise HTTPException(422, "Las propuestas de VERA se descartan, no se eliminan")
+    row.events = [deepcopy(item) for item in row.events if item['id'] != event['id']]
+    row.review_items = without_event(row.review_items or [], event['id'])
     bump(row, db)
     return state(row, row.mode)
 
@@ -230,5 +289,7 @@ def source(record_id: UUID, event_id: UUID, source: str | None = None, user: Use
     ref = next((item for item in event_sources(event) if source is None or item['id'] == source), None)
     if ref is None:
         raise HTTPException(404, "Fuente no encontrada")
+    if ref['kind'] == PERSON:
+        return {**ref, "current_text": event['description'], "changed": False}
     text, version = current_version(db, record_id, ref, user)
     return {**ref, "current_text": text, "changed": version != ref['version']}

@@ -17,6 +17,7 @@ from .submission import organizations as organizations_router, router as submiss
 from .institutional import router as institutional_router
 from .overview import router as overview_router
 from .profile import router as profile_router
+from .record_removal import router as record_removal_router
 
 config = settings()
 app = FastAPI(title="VERA · API", docs_url="/api/docs" if config.app_env != "production" else None, redoc_url=None)
@@ -32,6 +33,7 @@ app.include_router(organizations_router)
 app.include_router(institutional_router)
 app.include_router(overview_router)
 app.include_router(profile_router)
+app.include_router(record_removal_router)
 app.add_middleware(CORSMiddleware, allow_origins=config.allowed_origins,
                    allow_credentials=True, allow_methods=["GET", "POST", "PUT", "DELETE"],
                    allow_headers=["Content-Type", "X-VERA-Request"])
