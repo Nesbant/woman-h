@@ -58,10 +58,11 @@ Pruebas: `cd backend && ../.venv/bin/python -m pytest -q` y `cd frontend && npm 
 | `DEMO_ENABLED` / `DEMO_PASSWORD` | Carga ficticia; contraseña de 16+ caracteres |
 | `STORAGE_FACTORY` / `STORAGE_ROOT` | Almacenamiento privado (fuera de `frontend/`) |
 | `MAX_UPLOAD_BYTES`, `MAX_IMAGE_PIXELS`, `MAX_PDF_PAGES` | Límites de archivos |
-| `TIMELINE_AI_FACTORY` | `app.timeline_ai:FixtureAdapter` (defecto) o `app.timeline_ai:HttpAdapter` |
+| `TIMELINE_AI_FACTORY` | `app.timeline_ai:FixtureAdapter` (defecto), `app.timeline_ai:OpenRouterTimelineAdapter` (IA real vía OpenRouter) o `app.timeline_ai:HttpAdapter` (endpoint propio) |
 | `TIMELINE_AI_URL` / `TIMELINE_AI_KEY` | Endpoint HTTPS del proveedor para `HttpAdapter` |
+| `TIMELINE_MODEL` | Modelo de `OpenRouterTimelineAdapter` (opcional; vacío usa `CHAT_MODEL`) |
 | `CHAT_BRAIN` | Cerebro de la conversación (epic #5): `scripted` (defecto) o `openrouter` — ver aviso abajo |
-| `OPENROUTER_API_KEY` | Obligatoria solo con `CHAT_BRAIN=openrouter` |
+| `OPENROUTER_API_KEY` | Obligatoria con `CHAT_BRAIN=openrouter` o `TIMELINE_AI_FACTORY=app.timeline_ai:OpenRouterTimelineAdapter` |
 | `CHAT_MODEL` | Modelo primario en OpenRouter (defecto `google/gemini-3.1-flash-lite`) |
 | `CHAT_FALLBACK_MODELS` | Lista JSON de modelos de repuesto, en orden (defecto `["deepseek/deepseek-v4-flash"]`) |
 | `OPENROUTER_BASE_URL` | Endpoint de Chat Completions (defecto el público de OpenRouter) |
@@ -103,7 +104,7 @@ con Python 3.12; `railway.json` configura el builder, la migración previa al de
 `COOKIE_SECURE=false` o un origen no HTTPS) — la carga ficticia queda deshabilitada en el despliegue real, sin
 excepción, y no se modificó ese validador.
 
-**Fallback de IA (cronología):** siempre se intenta *adaptador configurado → `backend/app/demo_fixture.json` → selección extractiva*. Todo lo propuesto se verifica en el servidor: cada evento debe citar fuentes existentes con citas literales; fechas exactas sin respaldo quedan "pendientes de confirmar"; puntajes, culpabilidad, credibilidad o sanciones se descartan.
+**Fallback de IA (cronología):** siempre se intenta *adaptador configurado → `backend/app/demo_fixture.json` (solo en modo demo) → selección extractiva*. Con `TIMELINE_AI_FACTORY=app.timeline_ai:OpenRouterTimelineAdapter`, cada "Entender" viaja a OpenRouter con el mismo modelo/proveedor que el chat (`TIMELINE_MODEL` o, si no está, `CHAT_MODEL`); ante cualquier falla del proveedor (sin clave, error HTTP, timeout, salida inválida) se sigue con el resto de la cadena, así que el caso de María sigue funcionando incluso sin `OPENROUTER_API_KEY`. Todo lo propuesto se verifica en el servidor: cada evento debe citar fuentes existentes con citas literales; fechas y horas exactas sin respaldo quedan "pendientes de confirmar" (nunca se completan ni se inventan); puntajes, culpabilidad, credibilidad o sanciones se descartan.
 
 **Conversación con VERA — modo demo vs. proveedor real:** con `CHAT_BRAIN=scripted` (defecto), la conversación corre siempre en `mode: "demo"`, con un guion determinístico (`app/agent/scripted.py`) que no llama a ningún servicio externo. **Con `CHAT_BRAIN=openrouter`, cada mensaje que la persona escribe en el chat viaja a OpenRouter y al proveedor del modelo elegido** (`CHAT_MODEL`/`CHAT_FALLBACK_MODELS`, proveedores externos); requiere `OPENROUTER_API_KEY`. Si falta la clave, el proveedor falla o hay timeout, se corta por un límite de tokens o un filtro de contenido, devuelve una salida inválida o su respuesta usa lenguaje de juicio (SPEC §15), el turno completo se reintenta con `ScriptedBrain` y responde igual en `mode: "demo"` — nunca con un error 5xx ni un turno a medio guardar. Ninguna herramienta de la conversación envía nada ni crea un caso institucional por sí sola, sea cual sea el cerebro activo (ver SPEC, sección "VERA conversacional").
 

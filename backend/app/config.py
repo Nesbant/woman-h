@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     timeline_ai_factory: str = "app.timeline_ai:FixtureAdapter"
     timeline_ai_url: str | None = None
     timeline_ai_key: str | None = None
+    # `timeline_ai:OpenRouterTimelineAdapter`'s primary model; defaults to `chat_model` (same provider account,
+    # same `chat_fallback_models`/timeout/provider routing as the chat brain) so a deployment that only sets
+    # `CHAT_MODEL` gets a working timeline adapter too, without a second model choice to keep in sync.
+    timeline_model: str | None = None
     # EST-04 (epic #5): which `AgentBrain` answers the conversation. `scripted` is the only one that exists
     # yet (`agent/scripted.py`); `openrouter` is EST-05's real provider brain, added without changing this
     # default.
@@ -63,6 +67,11 @@ class Settings(BaseSettings):
         if not self.frontend_dist.is_absolute():
             self.frontend_dist = project / self.frontend_dist
         self.frontend_dist = self.frontend_dist.resolve()
+        # Railway's own `DATABASE_URL` reference (and Postgres tooling in general) uses the plain `postgresql://`
+        # scheme; SQLAlchemy needs the `+psycopg` driver suffix to pick psycopg3. Normalized here so a Railway
+        # variable reference can be pasted in verbatim instead of requiring a hand-edited scheme.
+        if self.database_url.startswith("postgresql://"):
+            self.database_url = "postgresql+psycopg://" + self.database_url[len("postgresql://"):]
         if self.app_env != "test" and not self.database_url.startswith("postgresql+psycopg://"):
             raise ValueError("VERA requiere PostgreSQL fuera de las pruebas")
         if "*" in self.allowed_origins:
