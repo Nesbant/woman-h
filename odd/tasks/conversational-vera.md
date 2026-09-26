@@ -31,7 +31,7 @@ Runners: `backend/.venv/bin/python -m pytest -q` (SQLite; PG via `TEST_DATABASE_
 - [x] EST-03 (#9) Validated tool executor (6 tools, strict schemas) + `state.build_case_state`
 - [x] EST-04 (#10) Turn orchestrator + ScriptedBrain, real messages/state endpoints, idempotency, 409
 - [ ] EST-05 (#11) Claude brain (anthropic SDK, strict tools, caching, structured output, fallback to scripted)
-- [ ] EST-06 (#12) `prepare_share_preview` never submits
+- [x] EST-06 (#12) `prepare_share_preview` never submits
 - [ ] EST-07 (#13) Seed conversation, safety tests (both brains), README/SPEC
 - [ ] EST-08 (#14) Integration + DoD — blocked on CMP-07
 
@@ -119,6 +119,26 @@ Runners: `backend/.venv/bin/python -m pytest -q` (SQLite; PG via `TEST_DATABASE_
   narrated a fact (created a `candidate` event sourced from the message), said "Guárdalo, quiero dejar
   constancia de eso." (event became `confirmed` in `case_state`), and verified the same event shows
   `status=accepted, reviewed=true` on the plain `GET .../timeline` endpoint. Server stopped afterward.
+
+- EST-06 done: `agent/tools.py::prepare_share_preview` now reuses the real draft pipeline instead of
+  EST-03's placeholder. Extracted `drafts.refresh_draft(db, record_id, user, timeline, draft)` out of the
+  `POST .../complaint/generate` handler (same `build_fields`/`source_map`/`touch` it always ran, now shared,
+  no behavior change to the HTTP endpoint) and call it from the tool with the case owner looked up from
+  `PrivateRecord.owner_id` (`ToolContext` carries no `user` — `turn.py` never needed one before this). The
+  tool never commits (same rule as every other tool): it only mutates the `ComplaintDraft` row through the
+  turn's own session, exactly like it already mutated `Timeline.events`. Default selection = every accepted
+  fact plus the files its sources link, straight out of the refreshed `draft.fields_json` — the same rule
+  the teammate's `useShareSelection` frontend hook defaults to (`facts.map(event_id)` + `evidence.file_ids`).
+  This is also why relato (`Account.description`) and the private note (`PrivateRecord.private_note`) are
+  excluded: neither one is ever a draft field to begin with, only `Timeline` events and their sources are.
+  `pytest tests/test_agent_share.py` (new): 4 passed — 0 `InstitutionalCase` after the tool, the private
+  draft is actually refreshed and matches what `complaint/generate` would return, relato/note never appear
+  in the refreshed draft's JSON, an unlinked file is excluded, and a still-`candidate` event stays out of the
+  preview. `pytest tests/test_agent_share.py tests/test_conversation_turn.py tests/test_agent_tools.py`: 34
+  passed (no regressions in the existing placeholder-era assertions, since the default selection rule did
+  not change, only how it is computed). Full suite SQLite: 199 passed / 1 skipped (baseline 195/1; +4, no
+  regressions). Full suite PostgreSQL: not run this session (Docker Desktop / `woman-h-db-1` still
+  unreachable) — recorded as pending, same as EST-04. No `agent/contracts.py` changes.
 
 ## Next step
 EST-05 (#11): Claude brain (anthropic SDK, strict tools, prompt caching, structured output, automatic fallback

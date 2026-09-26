@@ -115,6 +115,21 @@ def read_draft(record_id: UUID, user: User = Depends(current_user), db: Session 
     return respond(db, record_id, find_draft(db, record_id))
 
 
+def refresh_draft(db, record_id, user, timeline, draft):
+    """Creates or refreshes the draft from the events accepted so far (pending and discarded events are left
+    out), against `timeline` exactly as it stands right now — never committing. Shared by the `generate` HTTP
+    endpoint and the `prepare_share_preview` agent tool (EST-06, issue #12), so there is exactly one place
+    that turns accepted events into draft fields."""
+    fields = build_fields(user, db.get(Profile, user.id), events_of(timeline), mentioned_people(db, record_id),
+                          draft.fields_json if draft else None)
+    if draft is None:
+        draft = ComplaintDraft(id=str(uuid4()), record_id=str(record_id), revision=0, created_at=datetime.now(timezone.utc))
+        db.add(draft)
+    draft.fields_json, draft.source_map, draft.timeline_revision = fields, source_map(fields), revision_of(timeline)
+    touch(draft)
+    return draft
+
+
 @router.post("/complaint/generate")
 def generate(record_id: UUID, data: Revision, user: User = Depends(current_user), db: Session = Depends(get_db)):
     """Create or refresh the draft from the events accepted so far. Pending and discarded events are left out."""
@@ -122,13 +137,7 @@ def generate(record_id: UUID, data: Revision, user: User = Depends(current_user)
     timeline = db.get(Timeline, str(record_id))
     if revision_of(timeline) != data.revision:
         raise HTTPException(409, "La cronología cambió en otra ventana. Recarga antes de continuar")
-    fields = build_fields(user, db.get(Profile, user.id), events_of(timeline), mentioned_people(db, record_id),
-                          draft.fields_json if draft else None)
-    if draft is None:
-        draft = ComplaintDraft(id=str(uuid4()), record_id=str(record_id), revision=0, created_at=datetime.now(timezone.utc))
-        db.add(draft)
-    draft.fields_json, draft.source_map, draft.timeline_revision = fields, source_map(fields), data.revision
-    touch(draft)
+    draft = refresh_draft(db, record_id, user, timeline, draft)
     db.commit()
     return draft_state(db, record_id, draft, timeline)
 

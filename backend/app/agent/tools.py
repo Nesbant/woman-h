@@ -8,17 +8,21 @@ Non-negotiable (epic #5): confirming or discarding a fact requires a literal `us
 message the person actually sent this turn (`_require_quote`); `model_inference` never confirms itself —
 enforced structurally, since every path that sets `status='accepted'` here also sets `reviewed=True` at the
 same time (the same guarantee `events.ModelInferenceNotReviewed` defends). No tool here ever creates or
-touches an `InstitutionalCase`: `prepare_share_preview` only returns what a later, explicit send would
-include (EST-06 completes the real draft refresh); nothing is written.
+touches an `InstitutionalCase`: `prepare_share_preview` (EST-06, issue #12) refreshes the private
+`ComplaintDraft` the same way `POST .../complaint/generate` does (`drafts.refresh_draft`, built on
+`draft_fields.build_fields`) and returns only the `open_share_preview` action — never a send, never an
+institutional record.
 
-A tool call never commits: it only mutates `ToolContext.row.events` (and, for the share preview, reads).
-The turn orchestrator (EST-04, `turn.py`) commits once per turn, after every tool call in that turn's loop
-succeeded — the same per-case lock that serializes turns is what makes a client-supplied revision
+A tool call never commits: it only mutates `ToolContext.row.events` (and, for the share preview,
+`ComplaintDraft` fields, through the same session the turn orchestrator commits once at the end of the
+turn). The turn orchestrator (EST-04, `turn.py`) commits once per turn, after every tool call in that turn's
+loop succeeded — the same per-case lock that serializes turns is what makes a client-supplied revision
 unnecessary here, unlike the plain HTTP timeline endpoints."""
 from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from ..models import RecordFile, Timeline
+from ..drafts import find_draft, refresh_draft
+from ..models import PrivateRecord, RecordFile, Timeline, User
 from ..proposals import checked_time, clean_text, exact_date
 from ..sources import literal_date, unknown_date
 from .events import quote_in_message, new_message_event, update_message_event
@@ -283,9 +287,12 @@ def get_case_summary(arguments, ctx):
 
 
 # --- prepare_share_preview -------------------------------------------------------------------------------
-# EST-03 placeholder (issue #9): only the preview action, built from the real case state. EST-06 (issue #12)
-# reuses `drafts.build_fields`/`generate` to refresh the actual private draft first. Never submits: no
-# `InstitutionalCase` is created or touched by anything in this module.
+# EST-06 (issue #12): reuses `drafts.refresh_draft` (itself built on `draft_fields.build_fields`) to refresh
+# the actual private draft — the same one `POST .../complaint/generate` maintains — then reads the default
+# selection straight out of it: every accepted fact plus the files its sources already link (the same rule
+# the teammate's `useShareSelection` frontend hook defaults to: every draft fact and its linked files). This
+# is why relato, the private note and unlinked files are excluded — none of them are draft fields at all.
+# Never submits: no `InstitutionalCase` is created or touched by anything in this module.
 
 PREPARE_SHARE_PREVIEW_SCHEMA = {
     "name": "prepare_share_preview",
@@ -297,11 +304,16 @@ PREPARE_SHARE_PREVIEW_SCHEMA = {
 }
 
 
+def _case_owner(ctx):
+    record = ctx.db.get(PrivateRecord, ctx.record_id)
+    return ctx.db.get(User, record.owner_id)
+
+
 def prepare_share_preview(arguments, ctx):
-    state = build_case_state(ctx.db, ctx.record_id)
-    event_ids = [event.id for event in state.events if event.status in ("confirmed", "corrected")]
-    selected = set(event_ids)
-    file_ids = sorted({item.file_id for item in state.evidence if selected & set(item.linked_event_ids)})
+    user = _case_owner(ctx)
+    draft = refresh_draft(ctx.db, ctx.record_id, user, ctx.row, find_draft(ctx.db, ctx.record_id))
+    event_ids = [fact["event_id"] for fact in draft.fields_json["facts"]["events"]]
+    file_ids = draft.fields_json["evidence"]["file_ids"]
     return {"action": "open_share_preview", "event_ids": event_ids, "file_ids": file_ids}
 
 
