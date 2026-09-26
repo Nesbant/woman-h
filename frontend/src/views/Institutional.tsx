@@ -75,7 +75,8 @@ function CaseView({ detail, userId, busy, onChange, onDownload }: { detail: Case
     [name?.value, extra.filter(Boolean).join(', ')].filter(Boolean).join(' · ') || 'No informado'
   const parties = [
     ['Persona afectada', person(s.affected.name, [s.affected.position?.value, s.affected.area?.value])],
-    ['Persona mencionada', s.respondent_confirmed === false ? 'No confirmada por la persona' : person(s.respondent.name, [s.respondent.position?.value])],
+    // An unconfirmed identity is never shared, so the organization cannot tell it apart from none at all.
+    ['Persona mencionada', s.respondent.name?.value ? person(s.respondent.name, [s.respondent.position?.value]) : 'No informada'],
     ['Presenta el reporte', s.reporter.same_as_affected ? (s.affected.name?.value ?? 'La persona afectada') : (s.reporter.name.value ?? 'No informado')],
   ]
   const done = detail.procedure.filter(step => step.status === 'done').length

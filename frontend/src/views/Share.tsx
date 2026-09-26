@@ -85,7 +85,7 @@ export function Share({ recordId }: { recordId: string }) {
   const f = draft?.fields
   const parties = f ? [
     { k: 'Persona afectada', v: [f.affected.name.value, [f.affected.position.value, f.affected.area.value].filter(Boolean).join(', ')].filter(Boolean).join(' · ') || 'Pendiente de confirmar' },
-    { k: 'Persona mencionada', v: f.respondent_confirmed && f.respondent.name.value ? [f.respondent.name.value, f.respondent.position.value].filter(Boolean).join(' · ') : null },
+    { k: 'Persona mencionada', v: !f.respondent.name.value ? 'No informada' : f.respondent_confirmed ? [f.respondent.name.value, f.respondent.position.value].filter(Boolean).join(' · ') : null },
     { k: 'Presenta el reporte', v: (f.reporter.same_as_affected ? f.affected.name.value : f.reporter.name.value) || 'Pendiente de confirmar' },
   ] : []
   const measures = f ? f.protection_measures.selected.map(code => state!.measure_options.find(o => o.code === code)?.label ?? code) : []

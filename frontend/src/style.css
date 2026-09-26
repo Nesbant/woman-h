@@ -357,7 +357,8 @@ h1, h2, h3, p { margin: 0 }
 .kpi dd { margin: 0 }
 .kpi strong { font-size: 28px; line-height: 34px; font-weight: 700 }
 .kpi dt { font-size: 13px; color: var(--text-3) }
-.case-table { flex: 1 1 380px; min-width: 0 }
+.case-table { flex: 1 1 380px; min-width: 0; overflow-x: auto }
+.case-table .case-grid { min-width: 460px }
 .case-grid { display: grid; grid-template-columns: 80px 1fr 120px 1fr; gap: 10px; align-items: center }
 .case-table-head { padding: 12px 18px; background: var(--surface-muted); border-bottom: 1px solid var(--line-soft); font-size: 12px; font-weight: 650; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em }
 .case-row { width: 100%; padding: 14px 18px; border: 0; border-bottom: 1px solid var(--line-soft); background: #fff; text-align: left; font-size: 14px }

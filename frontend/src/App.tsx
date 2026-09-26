@@ -84,6 +84,7 @@ function Login({ demo, error, onLogin, onDemo }: { demo: boolean; error: string;
   </main>
 }
 
+const DEMO_PERSON = 'maria@example.test', DEMO_ORGANIZATION = 'lucia@example.test'
 const CRUMBS: Record<Step | 'enviado', string> = { registrar: 'Registrar', entender: 'Entender', preparar: 'Preparar reporte', compartir: 'Revisar y compartir', enviado: 'Caso enviado' }
 
 function Shell({ user, demo, onDemo, onLogout }: { user: User; demo: boolean; onDemo: (as: 'person' | 'organization') => void; onLogout: () => void }) {
@@ -137,17 +138,19 @@ function Shell({ user, demo, onDemo, onLogout }: { user: User; demo: boolean; on
           <nav className="side-nav"><button className="side-link inst" aria-current="page"><span className="side-icon"><InboxIcon /></span><span style={{ flex: 1 }}>Casos recibidos</span><span className="count">{caseCount ?? ''}</span></button></nav>
         </>}
         <div className="side-footer">
-          {demo ? <>
-            <span className="side-label">Demo · ver como</span>
-            <div className="segmented">
-              <button aria-pressed={!isInst} onClick={() => onDemo('person')}>Persona</button>
-              <button className="inst" aria-pressed={isInst} onClick={() => onDemo('organization')}>Organización</button>
-            </div>
-          </> : membership && <>
-            <span className="side-label">Espacio</span>
+          {/* Own spaces first: the demo switch changes account, it must never be the only way into your institution. */}
+          {membership && !(demo && user.email === DEMO_ORGANIZATION) && <>
+            <span className="side-label">Tu espacio</span>
             <div className="segmented">
               <button aria-pressed={!isInst} onClick={() => navigate('')}>Privado</button>
               <button className="inst" aria-pressed={isInst} onClick={() => navigate('institutional')}>Institutional</button>
+            </div>
+          </>}
+          {demo && <>
+            <span className="side-label">Demo · ver como</span>
+            <div className="segmented">
+              <button aria-pressed={user.email === DEMO_PERSON} onClick={() => onDemo('person')}>Persona</button>
+              <button className="inst" aria-pressed={user.email === DEMO_ORGANIZATION && isInst} onClick={() => onDemo('organization')}>Organización</button>
             </div>
           </>}
           <button className="btn btn-ghost btn-sm" onClick={onLogout}>Cerrar sesión</button>

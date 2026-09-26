@@ -128,7 +128,7 @@ test('Institutional asigna, cambia estado y avanza el checklist en tres estados'
   const user = userEvent.setup()
   expect(await screen.findByRole('heading', { name: 'Caso V-004' })).toBeInTheDocument()
   expect(screen.getByText('En revisión o seguimiento')).toBeInTheDocument()
-  expect(screen.getByText('No confirmada por la persona')).toBeInTheDocument()
+  expect(screen.getByText('No informada')).toBeInTheDocument()
   expect(screen.getByText('16 sep · 22:43')).toBeInTheDocument()
   await user.click(screen.getByRole('button', { name: 'Asignarme' }))
   expect(await screen.findByText('Lucía R. (tú)')).toBeInTheDocument()

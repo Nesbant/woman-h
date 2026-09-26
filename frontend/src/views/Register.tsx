@@ -31,6 +31,8 @@ export function Register({ recordId }: { recordId: string }) {
   const [drawer, setDrawer] = useState<DrawerSource | null>(null)
   const account = useRef<Account | null>(null)
   const entry = useRef(crypto.randomUUID())
+  const creating = useRef<Promise<string> | null>(null)
+  const target = useRef<'registrar' | 'entender'>('registrar')
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const picker = useRef<HTMLInputElement>(null)
   const { refresh } = useRecordContext()
@@ -53,11 +55,13 @@ export function Register({ recordId }: { recordId: string }) {
     return () => { active = false; Object.values(pendingTimers).forEach(clearTimeout) }
   }, [recordId, isNew, fail])
 
-  /** Creates the situation the first time something is saved; returns its id. */
-  async function ensureRecord(text: string) {
-    if (!isNew) return recordId
-    const created = await api<{ record_id: string }>('/start', { method: 'POST', body: JSON.stringify({ entry_id: entry.current, text }) })
-    return created.record_id
+  /** Creates the situation once, even if blur and click both ask for it; returns its id. */
+  function ensureRecord(text: string) {
+    if (!isNew) return Promise.resolve(recordId)
+    creating.current ??= api<{ record_id: string }>('/start', { method: 'POST', body: JSON.stringify({ entry_id: entry.current, text }) })
+      .then(created => created.record_id)
+      .catch(error => { creating.current = null; throw error })
+    return creating.current
   }
   async function saveStory(text: string) {
     if (!text.trim()) return
@@ -65,7 +69,8 @@ export function Register({ recordId }: { recordId: string }) {
     try {
       if (isNew) {
         const id = await ensureRecord(text)
-        refresh(); navigate(recordPath(id, 'registrar'))
+        // Read the destination after creating: a click on "Entender" during the save must win over the blur.
+        refresh(); navigate(recordPath(id, target.current))
         return
       }
       const current = account.current
@@ -100,7 +105,7 @@ export function Register({ recordId }: { recordId: string }) {
   }
   async function understand() {
     Object.values(timers.current).forEach(clearTimeout)
-    if (isNew) { if (story.trim()) await saveStory(story); return }
+    if (isNew) { target.current = 'entender'; if (story.trim()) await saveStory(story); return }
     if (story.trim() && story !== account.current?.description) await saveStory(story)
     navigate(recordPath(recordId, 'entender'))
   }
@@ -136,13 +141,13 @@ export function Register({ recordId }: { recordId: string }) {
                 placeholder="Por ejemplo: mensaje recibido el 16/09/2026 a las 22:43…" /></label>
             <span className="small">VERA no lee imágenes. Si describes lo que muestra, podrá usar tu descripción como fuente.</span>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="btn btn-ghost btn-sm" onClick={() => { setPending(null); setDescription('') }} disabled={uploading}>Cancelar</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => { setPending(null); setDescription(''); setError('') }} disabled={uploading}>Cancelar</button>
               <button className="btn btn-primary btn-sm" onClick={upload} disabled={uploading}>{uploading ? 'Guardando…' : 'Guardar evidencia'}</button>
             </div>
           </div> : <div className="add-grid">
             {PICKERS.map(p => <button key={p.label} className="add-tile" disabled={isNew} title={isNew ? 'Escribe tu relato para poder adjuntar evidencia' : undefined}
               onClick={() => { if (picker.current) { picker.current.accept = p.accept; picker.current.click() } }}>{p.label}</button>)}
-            <input ref={picker} type="file" hidden onChange={e => { const file = e.target.files?.[0]; if (file) setPending(file); e.target.value = '' }} />
+            <input ref={picker} type="file" hidden onChange={e => { const file = e.target.files?.[0]; if (file) { setPending(file); setError('') } e.target.value = '' }} />
           </div>}
           {isNew && <span className="small">Escribe tu relato para empezar; luego podrás adjuntar evidencia.</span>}
         </div>
