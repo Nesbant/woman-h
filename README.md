@@ -70,6 +70,8 @@ Pruebas: `cd backend && ../.venv/bin/python -m pytest -q` y `cd frontend && npm 
 | `OPENROUTER_HTTP_REFERER` / `OPENROUTER_X_TITLE` | Opcionales, solo para el ranking de apps de OpenRouter |
 | `API_PROXY_TARGET` | En `frontend/.env`: destino del proxy de Vite |
 | `FRONTEND_DIST` | Directorio del SPA compilado que sirve el backend (defecto `frontend/dist`; ver despliegue) |
+| `SEED_MARIA_EMAIL`/`SEED_MARIA_PASSWORD`, `SEED_REVIEWER_EMAIL`/`SEED_REVIEWER_PASSWORD`, `SEED_USER_EMAIL`/`SEED_USER_PASSWORD`/`SEED_USER_NAME` | `python -m app.seed_production` (sin `DEMO_ENABLED`); cada cuenta se salta si falta su email o contraseña; contraseñas de 16+ caracteres |
+| `SEED_ON_START` | Corre la semilla de producción una vez al iniciar la aplicación (ver despliegue: Railway) |
 
 ## Despliegue (Railway)
 
@@ -84,25 +86,55 @@ con Python 3.12; `railway.json` configura el builder, la migración previa al de
    `deploy.preDeployCommand` ejecuta `alembic upgrade head` antes de cada despliegue, healthcheck en
    `/api/health`, reinicio `ON_FAILURE`).
 2. **PostgreSQL**: plugin/plantilla de Railway en el mismo proyecto (por defecto se llama `Postgres`; expone
-   `PGUSER`, `PGPASSWORD`, `PGHOST`, `PGPORT`, `PGDATABASE`).
+   `PGUSER`, `PGPASSWORD`, `PGHOST`, `PGPORT`, `PGDATABASE`, `DATABASE_URL`).
 3. **Volumen**: se monta desde la UI de Railway (no es configuración como código) en el servicio web, con
    punto de montaje `/data` — ahí vive `STORAGE_ROOT=/data/private-storage` (fijado en el `Dockerfile`), fuera
    del sistema de archivos efímero del contenedor.
+4. **Variables** (tabla abajo), **Generate Domain** (*Settings → Networking*) y luego pega ese dominio en
+   `ALLOWED_ORIGINS`, **Redeploy**.
 
 ### Variables del servicio web
 
 | Variable | Valor |
 | --- | --- |
-| `DATABASE_URL` | `postgresql+psycopg://${{Postgres.PGUSER}}:${{Postgres.PGPASSWORD}}@${{Postgres.PGHOST}}:${{Postgres.PGPORT}}/${{Postgres.PGDATABASE}}` (referencia al plugin de PostgreSQL; ajusta `Postgres` si le pusiste otro nombre al servicio) |
+| `DATABASE_URL` | `postgresql+psycopg://${{Postgres.PGUSER}}:${{Postgres.PGPASSWORD}}@${{Postgres.PGHOST}}:${{Postgres.PGPORT}}/${{Postgres.PGDATABASE}}` (referencia al plugin de PostgreSQL; ajusta `Postgres` si le pusiste otro nombre al servicio). También puedes referenciar `${{Postgres.DATABASE_URL}}` directamente: `config.py` normaliza un `postgresql://` sin más a `postgresql+psycopg://`; solo arma la URL a mano si esa variable resultara usar el esquema corto `postgres://`, que no se normaliza. |
 | `APP_ENV` | `production` |
 | `ALLOWED_ORIGINS` | Lista JSON con el dominio público del propio servicio, p. ej. `["https://tu-servicio.up.railway.app"]` o tu dominio propio. Railway expone `RAILWAY_PUBLIC_DOMAIN` como variable automática, pero un servicio auto-referenciando su propia `RAILWAY_PUBLIC_DOMAIN` dentro de sus propias variables no está documentado como soportado (solo la referencia entre servicios, `${{NombreServicio.VAR}}`, está confirmada) — **pega el dominio generado tal cual** desde la pestaña *Settings → Networking* una vez creado el servicio. |
 | `COOKIE_SECURE` | `true` (obligatorio en `production`; ver validador de `config.py`) |
+| `DEMO_ENABLED` | `false` (o no declararla: ya es el defecto; el validador la rechaza en `true` bajo `APP_ENV=production`) |
 | `STORAGE_ROOT` | No hace falta declararla: el `Dockerfile` ya la fija en `/data/private-storage` |
-| `CHAT_BRAIN` / `ANTHROPIC_API_KEY` | Opcionales; solo si quieres la conversación con proveedor real en vez de `scripted` |
+| `CHAT_BRAIN` | `openrouter` — decisión: en producción la conversación **y** "Entender" usan IA real, no `scripted`/`FixtureAdapter` |
+| `OPENROUTER_API_KEY` | Obligatoria con `CHAT_BRAIN=openrouter` y/o `TIMELINE_AI_FACTORY=app.timeline_ai:OpenRouterTimelineAdapter` |
+| `CHAT_MODEL` | Modelo primario en OpenRouter (defecto `google/gemini-3.1-flash-lite`) |
+| `CHAT_FALLBACK_MODELS` | Lista JSON de modelos de repuesto, en orden (defecto `["deepseek/deepseek-v4-flash"]`) |
+| `TIMELINE_AI_FACTORY` | `app.timeline_ai:OpenRouterTimelineAdapter` |
+| `TIMELINE_MODEL` | Opcional; vacío usa `CHAT_MODEL` |
+| `SEED_MARIA_EMAIL` / `SEED_MARIA_PASSWORD` | Cuenta de María con su caso preparado (relato, evidencia, perfil, casos históricos, conversación) |
+| `SEED_REVIEWER_EMAIL` / `SEED_REVIEWER_PASSWORD` | Cuenta de revisión de Lucía en Empresa Andina S.A.C. |
+| `SEED_USER_EMAIL` / `SEED_USER_PASSWORD` / `SEED_USER_NAME` | Cuenta de uso real, sin ningún dato precargado |
+| `SEED_ON_START` | `true` — ver "Migraciones y semilla" abajo: `preDeployCommand` no tiene el volumen montado |
+
+Las tres contraseñas `SEED_*` siguen la misma regla que `DEMO_PASSWORD`: 16 caracteres o más
+(`app/seed_production.py` la rechaza si no, y no crea ninguna cuenta esa vez).
 
 **Aviso:** el validador de `config.py` rechaza `DEMO_ENABLED=true` cuando `APP_ENV=production` (junto con
 `COOKIE_SECURE=false` o un origen no HTTPS) — la carga ficticia queda deshabilitada en el despliegue real, sin
 excepción, y no se modificó ese validador.
+
+### Migraciones y semilla (`preDeployCommand` vs. inicio de la aplicación)
+
+`railway.json`'s `deploy.preDeployCommand` solo corre `alembic upgrade head`. Comprobado contra la
+documentación de Railway (docs.railway.com/guides/pre-deploy-command): *"Pre-deploy commands execute in a
+separate container from your application. Changes to the filesystem are not persisted and volumes are not
+mounted."* — es decir, `preDeployCommand` corre en un contenedor aparte y efímero, **sin el volumen montado**.
+Las migraciones no lo necesitan (solo hablan con PostgreSQL), pero `app/seed_production.py` sí escribe los
+tres archivos de evidencia de María bajo `STORAGE_ROOT` (el volumen) — correrlo ahí escribiría a un sistema de
+archivos que se descarta al terminar, y los archivos jamás sobrevivirían al contenedor real.
+
+Por eso la semilla de producción corre en el arranque de la aplicación real (`SEED_ON_START=true`, ver
+`main.py`'s `lifespan`), donde el volumen sí está montado. Es segura de dejar activada permanentemente:
+`app/seed_production.py` es idempotente (una cuenta que ya existe nunca se vuelve a tocar), así que cada
+reinicio del contenedor solo repite un chequeo barato tras el primero.
 
 **Fallback de IA (cronología):** siempre se intenta *adaptador configurado → `backend/app/demo_fixture.json` (solo en modo demo) → selección extractiva*. Con `TIMELINE_AI_FACTORY=app.timeline_ai:OpenRouterTimelineAdapter`, cada "Entender" viaja a OpenRouter con el mismo modelo/proveedor que el chat (`TIMELINE_MODEL` o, si no está, `CHAT_MODEL`); ante cualquier falla del proveedor (sin clave, error HTTP, timeout, salida inválida) se sigue con el resto de la cadena, así que el caso de María sigue funcionando incluso sin `OPENROUTER_API_KEY`. Todo lo propuesto se verifica en el servidor: cada evento debe citar fuentes existentes con citas literales; fechas y horas exactas sin respaldo quedan "pendientes de confirmar" (nunca se completan ni se inventan); puntajes, culpabilidad, credibilidad o sanciones se descartan.
 

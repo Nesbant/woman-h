@@ -45,7 +45,7 @@ Runners: `cd backend && ../.venv/bin/python -m pytest -q`; `cd frontend && npm t
 - [x] T6 Production seed (`python -m app.seed_production`): idempotent accounts for María (full case), the
       Empresa Andina reviewer (Lucía) and a plain real-use account, all from `SEED_*` env vars, without
       `DEMO_ENABLED`. `SEED_ON_START` (`main.py` lifespan) as the Railway-volume workaround for T7.
-- [ ] T7 Railway `preDeployCommand`/`SEED_ON_START` decision, README variables + setup steps, `.env.example`.
+- [x] T7 Railway `preDeployCommand`/`SEED_ON_START` decision, README variables + setup steps, `.env.example`.
 - [ ] T8 Docker check against a disposable `vera_deploycheck` database in `woman-h-db-1`.
 
 ## Acceptance criteria
@@ -201,6 +201,24 @@ Runners: `cd backend && ../.venv/bin/python -m pytest -q`; `cd frontend && npm t
 
   `pytest tests/test_seed_production.py`: 9 passed. Full suite SQLite: 233 passed / 1 skipped (baseline
   224/1 after T5, +9, no regressions).
+
+  T7 done: verified against Railway's own docs (`docs.railway.com/guides/pre-deploy-command`, fetched this
+  session) that `preDeployCommand` "execute[s] in a separate container from your application. Changes to the
+  filesystem are not persisted and volumes are not mounted." — so `railway.json` keeps `preDeployCommand` as
+  migrations-only (`alembic upgrade head`, unchanged) and the production seed runs through `SEED_ON_START`
+  (T6) instead, in the real container where the volume is attached. README: full Railway variables table
+  (`DATABASE_URL` with both the explicit PG*-built form and a note about referencing `${{Postgres.
+  DATABASE_URL}}` directly now that `config.py` normalizes a bare `postgresql://`; `APP_ENV`, `ALLOWED_ORIGINS`,
+  `COOKIE_SECURE`, `DEMO_ENABLED=false`, `STORAGE_ROOT` note, `CHAT_BRAIN=openrouter`, `OPENROUTER_API_KEY`,
+  `CHAT_MODEL`/`CHAT_FALLBACK_MODELS`, `TIMELINE_AI_FACTORY=OpenRouterTimelineAdapter`, `TIMELINE_MODEL`, all
+  six `SEED_*` vars, `SEED_ON_START`), a new "Migraciones y semilla" section explaining the
+  `preDeployCommand`/`SEED_ON_START` split with the verified quote, and a 4th "Servicios a crear" step
+  (variables → Generate Domain → paste into `ALLOWED_ORIGINS` → redeploy). Also fixed a stale
+  `CHAT_BRAIN`/`ANTHROPIC_API_KEY` line left over from before the OpenRouter migration (EST-05 revised) that
+  the general variables table and Railway section had both kept; `rg -n -i anthropic` now only matches
+  historical/explanatory prose in `agent/openrouter.py`, same as `conversational-vera.md` already recorded.
+  `.env.example`: `SEED_*` vars + `SEED_ON_START` added (T5's `TIMELINE_MODEL`/`OpenRouterTimelineAdapter`
+  option was already added when T5 landed).
 
 ## Next step
 User: commit the branch, create the Railway project (Postgres + volume at `/data`), set variables per README.
