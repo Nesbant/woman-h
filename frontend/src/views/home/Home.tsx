@@ -1,9 +1,11 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { deleteRecord, getOverview, listRecords, renameRecord } from '../../api/records'
 import type { Overview, User } from '../../types'
 import { conversationPath, navigate, NEW_RECORD, recordPath } from '../../router'
 import { firstName } from '../../format'
-import { ErrorAlert, Loading, PageTitle } from '../../components/PageTitle'
+import { ErrorAlert, Loading } from '../../components/PageTitle'
+import { AboutVera } from '../../components/AboutVera'
+import { Modal } from '../../components/Overlays'
 import { useToast } from '../../components/Toast'
 import { useAction } from '../../hooks/useAction'
 import { useResource } from '../../hooks/useResource'
@@ -41,12 +43,26 @@ function useSituationActions(reload: () => void) {
 
 export function Home({ user }: { user: User }) {
   const { data: situations, error, reload } = useResource(useCallback(loadSituations, []))
+  const [aboutOpen, setAboutOpen] = useState(false)
+  const aboutTrigger = useRef<HTMLButtonElement>(null)
+  const closeAbout = () => { setAboutOpen(false); aboutTrigger.current?.focus() }
   const actions = useSituationActions(reload)
   const create = () => navigate(recordPath(NEW_RECORD, 'registrar'))
   return <>
-    <PageTitle eyebrow="Espacio privado" title={`Hola, ${firstName(user.name)}`} lead="Ordena lo que ocurrió a tu ritmo. Guardar algo aquí no significa haberlo reportado.">
-      <button className="btn btn-primary" onClick={() => navigate(conversationPath())}>Conversar con VERA</button>
-    </PageTitle>
+    <section className="home-welcome" aria-labelledby="home-title">
+      <div className="home-welcome-copy">
+        <span className="home-welcome-eyebrow">Un espacio para ti</span>
+        <h1 id="home-title">Hola, {firstName(user.name)}</h1>
+        <h2 className="home-welcome-heading">No tienes que atravesarlo todo a solas.</h2>
+        <p className="home-welcome-lead">Conversa con VERA o vuelve a tus situaciones cuando lo necesites. Guardar algo aquí no significa haberlo reportado.</p>
+        <div className="home-welcome-actions">
+          <button className="btn btn-primary" onClick={() => navigate(conversationPath())}>Conversar con VERA</button>
+          <button className="btn btn-secondary" onClick={create}>Registrar algo nuevo</button>
+        </div>
+        <button ref={aboutTrigger} type="button" className="home-about-link" aria-haspopup="dialog" onClick={() => setAboutOpen(true)}>Conoce VERA</button>
+      </div>
+      <div className="home-welcome-art"><img src="/images/vera-companion-resting.jpeg" alt="Ilustración decorativa de VERA, un perrito lavanda recostado" /></div>
+    </section>
     <PrivacyHero />
     <div className="two-col">
       <div className="col-main">
@@ -55,11 +71,16 @@ export function Home({ user }: { user: User }) {
         {!situations ? !error && <Loading text="Cargando tus situaciones…" /> : situations.map(item =>
           <SituationCard key={item.record.id} overview={item} onRename={() => actions.open('rename', item)} onDelete={() => actions.open('delete', item)} />)}
         <button className="add-new" onClick={create}><span className="plus" aria-hidden="true">+</span>
-          <span><strong>Registrar algo nuevo</strong><span>Empieza con un relato, una captura o un documento. No necesitas tener la secuencia clara.</span></span></button>
+          <span><strong>Registrar algo nuevo</strong><span>Puedes empezar contando lo que pasó o añadiendo una captura o un documento. No necesitas tenerlo todo en orden.</span></span></button>
       </div>
       <Guide />
     </div>
     {actions.dialog?.kind === 'rename' && <RenameDialog overview={actions.dialog.overview} busy={actions.busy} error={actions.error} onSave={actions.rename} onCancel={actions.close} />}
     {actions.dialog?.kind === 'delete' && <DeleteDialog overview={actions.dialog.overview} busy={actions.busy} error={actions.error} onDelete={actions.remove} onCancel={actions.close} />}
+    {aboutOpen && <Modal labelledBy="about-vera-dialog-title" onClose={closeAbout}>
+      <div className="modal-head plain"><strong id="about-vera-dialog-title">Conoce VERA</strong>
+        <button className="close" aria-label="Cerrar presentación" autoFocus onClick={closeAbout}>✕</button></div>
+      <div className="about-vera-modal"><AboutVera /></div>
+    </Modal>}
   </>
 }
