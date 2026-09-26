@@ -10,6 +10,7 @@ import { Share } from '../views/share/Share'
 import { Sent } from '../views/share/Sent'
 import { Institutional } from '../views/institutional/Institutional'
 import { ProfileView } from '../views/profile/Profile'
+import { ConversationView } from '../views/conversation/ConversationView'
 
 function NotMember() {
   return <div className="callout"><span>Tu cuenta no pertenece a ninguna organización. Los espacios privados de otras personas nunca son visibles.</span></div>
@@ -36,6 +37,7 @@ export function ViewRouter({ route, user, demo, onDemo }: { route: Route; user: 
       return membership ? <Institutional key={membership.institution_id} institutionId={membership.institution_id} name={membership.name} userId={user.id} /> : <NotMember />
     case 'profile': return <ProfileView />
     case 'home': return <Home user={user} />
+    case 'conversation': return <ConversationView recordId={route.recordId} />
     case 'record': return <RecordView recordId={route.recordId} step={route.step} demo={demo} onDemo={onDemo} />
   }
 }

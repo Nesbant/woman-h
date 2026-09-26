@@ -1,13 +1,13 @@
 const GUIDE = [
-  ['Agrega lo que tengas', 'Relatos, capturas, correos o documentos.'],
-  ['VERA propone una estructura', 'Eventos y relaciones, siempre vinculados a sus fuentes.'],
-  ['Tú revisas', 'Confirma, corrige o descarta antes de usar la información.'],
-  ['Tú decides qué compartir', 'Solo lo autorizado pasa al espacio institucional.'],
+  ['Lo registrado', 'Tus relatos, capturas, correos y documentos siguen disponibles para revisar.'],
+  ['Eventos', 'Revisa o corrige las propuestas de VERA vinculadas a sus fuentes.'],
+  ['Borrador', 'Puedes preparar y revisar un reporte cuando lo necesites.'],
+  ['Compartir', 'Solo lo que autorices pasa al espacio institucional.'],
 ]
 
 export function Guide() {
   return <aside className="col-side card guide" aria-label="Cómo funciona">
-    <h3>Cómo funciona</h3>
-    {GUIDE.map(([title, detail], i) => <div className="numbered" key={title}><span>{i + 1}</span><div><strong>{title}</strong><span>{detail}</span></div></div>)}
+    <h3>También puedes revisar</h3>
+    {GUIDE.map(([title, detail]) => <div className="guide-option" key={title}><strong>{title}</strong><span>{detail}</span></div>)}
   </aside>
 }

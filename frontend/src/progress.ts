@@ -18,8 +18,7 @@ export function progress(overview: Overview | null) {
     preparar: sent || (!!overview?.draft.exists && !overview.draft.stale),
     compartir: sent,
   }
-  const next: Step = !done.entender ? 'entender' : !done.preparar ? 'preparar' : 'compartir'
-  const nextLabel = sent ? `Caso enviado · puedes seguir editando en privado`
-    : { registrar: 'Contar lo ocurrido', entender: 'Revisar los eventos propuestos por VERA', preparar: 'Preparar el borrador de reporte', compartir: 'Decidir qué compartir' }[done.registrar ? next : 'registrar']
-  return { done, next: done.registrar ? next : 'registrar' as Step, nextLabel, sent }
+  const reviewLabel = sent ? 'Caso enviado · puedes seguir editando en privado.'
+    : 'Puedes revisar y completar esta situación cuando quieras.'
+  return { done, reviewLabel, sent }
 }

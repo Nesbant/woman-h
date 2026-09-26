@@ -18,7 +18,7 @@ button { cursor: pointer }
 button:disabled { cursor: not-allowed; opacity: .6 }
 a { color: var(--brand) } a:hover { color: var(--brand-deep) }
 :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important } }
 h1, h2, h3, p { margin: 0 }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
 
@@ -185,6 +185,59 @@ h1, h2, h3, p { margin: 0 }
 .add-new span { font-size: 13px }
 .guide { display: flex; flex-direction: column; gap: 16px; padding: 20px 22px }
 .guide h3 { font-size: 18px; line-height: 24px; font-weight: 650 }
+.guide-option { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--text-2) }
+.guide-option strong { font-size: 14px; font-weight: 600; color: var(--text) }
+
+/* Conversación */
+.conversation-layout { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start }
+.conversation { flex: 2 1 520px; min-width: 0; min-height: 520px; padding: 20px; display: flex; flex-direction: column; gap: 16px }
+.conversation-mode { position: sticky; top: 76px; z-index: 2; padding: 10px 12px; border: 1px solid var(--brand-line); border-radius: 10px; background: var(--brand-soft); color: var(--brand-deep); font-size: 13px; font-weight: 600; overflow-wrap: anywhere }
+.conversation-log { flex: 1; min-height: 220px; display: flex; flex-direction: column; gap: 12px; overflow-wrap: anywhere }
+.conversation-empty { padding: 18px 4px; display: flex; flex-direction: column; gap: 8px; color: var(--text-2) }
+.conversation-empty h2 { font-size: 19px; line-height: 1.35; font-weight: 650; color: var(--text) }
+.conversation-empty p { font-size: 14px }
+.chat-message { max-width: min(85%, 600px); min-width: 0; padding: 12px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-soft); overflow-wrap: anywhere }
+.chat-message.user { align-self: flex-end; background: var(--brand-soft); border-color: var(--brand-line) }
+.chat-message strong { display: block; margin-bottom: 4px; font-size: 12px; color: var(--text-2) }
+.chat-message p { white-space: pre-wrap }
+.chat-message .small { display: block; margin-top: 6px }
+.conversation-composer { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding-top: 14px; border-top: 1px solid var(--line-soft) }
+.conversation-composer label { font-size: 12px; font-weight: 600; color: var(--text-2) }
+.conversation-composer > .textarea { resize: none; overflow-y: auto; max-height: 240px }
+.composer-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap }
+.attachment-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none }
+.attachment-chips .chip { max-width: 100%; min-width: 0; gap: 8px; white-space: normal }
+.attachment-name { min-width: 0; max-width: 220px; overflow-wrap: anywhere }
+.attachment-state { color: var(--text-2); font-weight: 500; white-space: normal }
+.attachment-remove { flex: none; border: 0; background: transparent; color: var(--text-2); font-size: 18px; line-height: 1; padding: 2px }
+.conversation-suggested-actions { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0 }
+.conversation-suggested-actions .btn { max-width: 100%; white-space: normal; text-align: left; overflow-wrap: anywhere }
+.understanding-panel { flex: 1 1 320px; min-width: 0; max-width: 100%; padding: 18px; display: flex; flex-direction: column; gap: 16px; overflow-wrap: anywhere }
+.understanding-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap }
+.understanding-head h2 { font-size: 17px; font-weight: 650 }
+.understanding-content { display: flex; flex-direction: column; gap: 16px; min-width: 0 }
+.understanding-content[hidden] { display: none }
+.understanding-content > .btn { align-self: flex-start }
+.understanding-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px }
+.understanding-counts div { display: flex; flex-direction: column; gap: 2px; padding: 10px; border-radius: 10px; background: var(--surface-soft) }
+.understanding-counts strong { font-size: 20px; line-height: 24px }
+.understanding-counts span { font-size: 11px; color: var(--text-2) }
+.understanding-events { display: flex; flex-direction: column; gap: 12px; padding: 0 }
+.understanding-events .event-card { padding: 16px }
+.understanding-events .event-title { font-size: 15px }
+.understanding-events .event-head { flex-wrap: wrap }
+.understanding-events .event-actions { flex-wrap: wrap }
+.recent-event .event-card { border-color: var(--brand-line-2); box-shadow: 0 0 0 2px var(--brand-wash) }
+@media (max-width: 640px) {
+  .conversation-layout { gap: 12px }
+  .conversation { flex-basis: 100%; min-height: 0; padding: 16px }
+  .conversation-log { min-height: 160px }
+  .chat-message { max-width: 100% }
+  .understanding-panel { flex-basis: 100%; padding: 16px }
+  .understanding-counts { gap: 5px }
+  .understanding-counts div { padding: 8px 6px }
+  .understanding-counts span { overflow-wrap: anywhere }
+}
 .numbered { display: flex; gap: 12px }
 .numbered > span:first-child { width: 26px; height: 26px; flex: none; border-radius: 50%; background: var(--brand-wash); color: var(--brand-deep); display: grid; place-items: center; font-size: 12px; font-weight: 700 }
 .numbered.warn > span:first-child { background: var(--warn-wash); color: var(--warn); font-size: 13px }

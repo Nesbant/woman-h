@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { markReviewed, submitCase } from '../../api/complaint'
 import { listFiles } from '../../api/files'
 import { navigate, recordPath } from '../../router'
@@ -11,14 +11,16 @@ import { useCurrentDraft } from '../draft/useCurrentDraft'
 import { PreviewModal } from './PreviewModal'
 import { OrgSummary, PrivatePanel, SharedPanel } from './SelectionPanels'
 import { useDestination } from './useDestination'
-import { useShareSelection } from './useShareSelection'
+import { clearSharePreselection, readSharePreselection, useShareSelection } from './useShareSelection'
 
 export function Share({ recordId }: { recordId: string }) {
+  const [preselection] = useState(() => readSharePreselection(recordId))
+  useEffect(() => { clearSharePreselection(recordId) }, [recordId])
   const { state, setState, error } = useCurrentDraft(recordId)
   const { data: files } = useResource(useCallback(() => listFiles(recordId), [recordId]))
   const destination = useDestination()
   const draft = state?.draft
-  const selection = useShareSelection(draft, files)
+  const selection = useShareSelection(draft, files, preselection)
   const [preview, setPreview] = useState(false)
   const action = useAction()
   const { overview, refresh } = useRecordContext()

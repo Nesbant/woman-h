@@ -3,12 +3,16 @@ import { useEffect, useState } from 'react'
 export type Step = 'registrar' | 'entender' | 'preparar' | 'compartir'
 export type Route =
   | { name: 'home' }
+  | { name: 'conversation'; recordId?: string }
   | { name: 'record'; recordId: string; step: Step | 'enviado' }
   | { name: 'institutional' }
   | { name: 'profile' }
 
 export function parseRoute(hash: string): Route {
   const path = hash.replace(/^#\/?/, '')
+  if (path === 'conversar') return { name: 'conversation' }
+  const conversation = /^s\/([^/]+)\/conversar$/.exec(path)
+  if (conversation) return { name: 'conversation', recordId: conversation[1] }
   const record = /^s\/([^/]+)\/(registrar|entender|preparar|compartir|enviado)$/.exec(path)
   if (record) return { name: 'record', recordId: record[1], step: record[2] as Step | 'enviado' }
   if (path === 'institutional') return { name: 'institutional' }
@@ -20,6 +24,7 @@ export const NEW_RECORD = 'nuevo'
 
 export function navigate(path: string) { window.location.hash = `/${path}` }
 export const recordPath = (recordId: string, step: Step | 'enviado') => `s/${recordId}/${step}`
+export const conversationPath = (recordId?: string) => recordId ? `s/${recordId}/conversar` : 'conversar'
 
 export function useRoute() {
   const [route, setRoute] = useState(() => parseRoute(window.location.hash))
