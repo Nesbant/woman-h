@@ -68,6 +68,40 @@ Pruebas: `cd backend && ../.venv/bin/python -m pytest -q` y `cd frontend && npm 
 | `OPENROUTER_TIMEOUT_SECONDS` | Timeout HTTP por llamada (defecto 30) |
 | `OPENROUTER_HTTP_REFERER` / `OPENROUTER_X_TITLE` | Opcionales, solo para el ranking de apps de OpenRouter |
 | `API_PROXY_TARGET` | En `frontend/.env`: destino del proxy de Vite |
+| `FRONTEND_DIST` | Directorio del SPA compilado que sirve el backend (defecto `frontend/dist`; ver despliegue) |
+
+## Despliegue (Railway)
+
+VERA se despliega como **un solo servicio web**: FastAPI sirve `/api/*` y también el SPA compilado
+(`frontend/dist`), porque la cookie de sesión es `SameSite=strict` con `path=/api` y necesita el mismo origen
+para la API y el frontend. `Dockerfile` (raíz del repo) compila el frontend con Node 22 y ejecuta el backend
+con Python 3.12; `railway.json` configura el builder, la migración previa al despliegue y el healthcheck.
+
+### Servicios a crear
+
+1. **Web service**: desde el repositorio de GitHub. Railway detecta `railway.json` (builder `DOCKERFILE`,
+   `deploy.preDeployCommand` ejecuta `alembic upgrade head` antes de cada despliegue, healthcheck en
+   `/api/health`, reinicio `ON_FAILURE`).
+2. **PostgreSQL**: plugin/plantilla de Railway en el mismo proyecto (por defecto se llama `Postgres`; expone
+   `PGUSER`, `PGPASSWORD`, `PGHOST`, `PGPORT`, `PGDATABASE`).
+3. **Volumen**: se monta desde la UI de Railway (no es configuración como código) en el servicio web, con
+   punto de montaje `/data` — ahí vive `STORAGE_ROOT=/data/private-storage` (fijado en el `Dockerfile`), fuera
+   del sistema de archivos efímero del contenedor.
+
+### Variables del servicio web
+
+| Variable | Valor |
+| --- | --- |
+| `DATABASE_URL` | `postgresql+psycopg://${{Postgres.PGUSER}}:${{Postgres.PGPASSWORD}}@${{Postgres.PGHOST}}:${{Postgres.PGPORT}}/${{Postgres.PGDATABASE}}` (referencia al plugin de PostgreSQL; ajusta `Postgres` si le pusiste otro nombre al servicio) |
+| `APP_ENV` | `production` |
+| `ALLOWED_ORIGINS` | Lista JSON con el dominio público del propio servicio, p. ej. `["https://tu-servicio.up.railway.app"]` o tu dominio propio. Railway expone `RAILWAY_PUBLIC_DOMAIN` como variable automática, pero un servicio auto-referenciando su propia `RAILWAY_PUBLIC_DOMAIN` dentro de sus propias variables no está documentado como soportado (solo la referencia entre servicios, `${{NombreServicio.VAR}}`, está confirmada) — **pega el dominio generado tal cual** desde la pestaña *Settings → Networking* una vez creado el servicio. |
+| `COOKIE_SECURE` | `true` (obligatorio en `production`; ver validador de `config.py`) |
+| `STORAGE_ROOT` | No hace falta declararla: el `Dockerfile` ya la fija en `/data/private-storage` |
+| `CHAT_BRAIN` / `ANTHROPIC_API_KEY` | Opcionales; solo si quieres la conversación con proveedor real en vez de `scripted` |
+
+**Aviso:** el validador de `config.py` rechaza `DEMO_ENABLED=true` cuando `APP_ENV=production` (junto con
+`COOKIE_SECURE=false` o un origen no HTTPS) — la carga ficticia queda deshabilitada en el despliegue real, sin
+excepción, y no se modificó ese validador.
 
 **Fallback de IA (cronología):** siempre se intenta *adaptador configurado → `backend/app/demo_fixture.json` → selección extractiva*. Todo lo propuesto se verifica en el servidor: cada evento debe citar fuentes existentes con citas literales; fechas exactas sin respaldo quedan "pendientes de confirmar"; puntajes, culpabilidad, credibilidad o sanciones se descartan.
 

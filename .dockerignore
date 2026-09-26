@@ -1,0 +1,26 @@
+.git
+.github
+.venv
+.atl
+odd
+
+**/node_modules
+**/dist
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+
+.env
+.env.*
+frontend/.env
+frontend/.env.*
+.private-storage
+
+playwright-report
+test-results
+e2e-scratch
+
+*.Zone.Identifier
+VERA Prototipo.html
+SPEC.md
+README.md

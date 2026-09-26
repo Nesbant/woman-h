@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     demo_password: str | None = None
     storage_factory: str = "app.storage:LocalStorage"
     storage_root: Path = Path(__file__).resolve().parents[2] / ".private-storage"
+    # Built SPA (`frontend/dist`, produced by `npm run build`). When present, `main.py` serves it from the same
+    # origin as `/api/*` (Railway option A: one web service); when absent, local dev is unchanged (Vite serves it).
+    frontend_dist: Path = Path(__file__).resolve().parents[2] / "frontend" / "dist"
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, ge=1024, le=100 * 1024 * 1024)
     max_image_pixels: int = Field(default=25_000_000, ge=1, le=100_000_000)
     max_pdf_pages: int = Field(default=200, ge=1, le=1000)
@@ -57,6 +60,9 @@ class Settings(BaseSettings):
         self.storage_root = self.storage_root.resolve()
         if self.storage_root.is_relative_to(project / "frontend"):
             raise ValueError("El almacenamiento privado no puede estar dentro del frontend")
+        if not self.frontend_dist.is_absolute():
+            self.frontend_dist = project / self.frontend_dist
+        self.frontend_dist = self.frontend_dist.resolve()
         if self.app_env != "test" and not self.database_url.startswith("postgresql+psycopg://"):
             raise ValueError("VERA requiere PostgreSQL fuera de las pruebas")
         if "*" in self.allowed_origins:
