@@ -123,7 +123,7 @@ def test_happy_path_reaches_mode_ai_through_the_est04_flow_with_a_stable_request
         assert body["messages"][0] == {"role": "system", "content": openrouter_module.SYSTEM_PROMPT}
         assert body["tools"] == expected_tools
         assert body["tool_choice"] == "auto"
-        assert body["parallel_tool_calls"] is False
+        assert "parallel_tool_calls" not in body  # excludes every provider under require_parameters
         assert body["model"] == "google/gemini-3.1-flash-lite"
         assert body["models"] == ["google/gemini-3.1-flash-lite", "deepseek/deepseek-v4-flash"]
         assert body["provider"] == {"require_parameters": True, "sort": "throughput"}

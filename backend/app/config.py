@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     timeline_ai_factory: str = "app.timeline_ai:FixtureAdapter"
     timeline_ai_url: str | None = None
     timeline_ai_key: str | None = None
+    # `timeline_ai:OpenRouterTimelineAdapter`'s primary model; defaults to `chat_model` (same provider account,
+    # same `chat_fallback_models`/timeout/provider routing as the chat brain) so a deployment that only sets
+    # `CHAT_MODEL` gets a working timeline adapter too, without a second model choice to keep in sync.
+    timeline_model: str | None = None
     # EST-04 (epic #5): which `AgentBrain` answers the conversation. `scripted` is the only one that exists
     # yet (`agent/scripted.py`); `openrouter` is EST-05's real provider brain, added without changing this
     # default.
@@ -51,6 +55,20 @@ class Settings(BaseSettings):
     # OpenRouter's own app-ranking pages) — never required, never sent when unset.
     openrouter_http_referer: str | None = None
     openrouter_x_title: str | None = None
+    # `python -m app.seed_production` (idempotent, safe on every deploy): creates up to three real accounts
+    # from these variables — María's fully prepared showcase case, Lucía's reviewer account at Empresa Andina,
+    # and a plain real-use account with no seeded data. Any account whose email/password pair is missing is
+    # skipped; an existing account's password and data are never touched on a later run.
+    seed_maria_email: str | None = None
+    seed_maria_password: str | None = None
+    seed_reviewer_email: str | None = None
+    seed_reviewer_password: str | None = None
+    seed_user_email: str | None = None
+    seed_user_password: str | None = None
+    seed_user_name: str | None = None
+    # Runs `seed_production.run()` once at application startup instead of (or in addition to) Railway's
+    # `preDeployCommand` — see odd/tasks/railway-deploy.md for why a mounted volume may need this.
+    seed_on_start: bool = False
 
     @model_validator(mode="after")
     def validate_environment(self):
@@ -63,6 +81,11 @@ class Settings(BaseSettings):
         if not self.frontend_dist.is_absolute():
             self.frontend_dist = project / self.frontend_dist
         self.frontend_dist = self.frontend_dist.resolve()
+        # Railway's own `DATABASE_URL` reference (and Postgres tooling in general) uses the plain `postgresql://`
+        # scheme; SQLAlchemy needs the `+psycopg` driver suffix to pick psycopg3. Normalized here so a Railway
+        # variable reference can be pasted in verbatim instead of requiring a hand-edited scheme.
+        if self.database_url.startswith("postgresql://"):
+            self.database_url = "postgresql+psycopg://" + self.database_url[len("postgresql://"):]
         if self.app_env != "test" and not self.database_url.startswith("postgresql+psycopg://"):
             raise ValueError("VERA requiere PostgreSQL fuera de las pruebas")
         if "*" in self.allowed_origins:
