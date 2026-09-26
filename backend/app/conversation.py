@@ -8,14 +8,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-from .agent.contracts import CaseState, ChatTurnRequest, ChatTurnResponse, ConversationView
+from .agent.contracts import CaseState, ChatMessage, ChatTurnRequest, ChatTurnResponse, ConversationView
 from .db import get_db
-from .models import PrivateRecord, User
+from .models import ConversationMessage, PrivateRecord, Timeline, User
 from .records import RecordInput, add_record, owned_record
 from .security import current_user
 
 router = APIRouter(tags=["Conversación"])
 EXAMPLES = Path(__file__).resolve().parents[2] / "contracts" / "examples"
+MAX_HISTORY = 50
 
 
 def load_example(name, model):
@@ -31,19 +32,43 @@ def for_case(state: CaseState, case_id: str) -> CaseState:
 @router.post("/api/conversations", status_code=201)
 def start_conversation(user: User = Depends(current_user), db: Session = Depends(get_db)):
     """Creates the private situation the conversation lives in (decision D1, odd/tasks/conversational-vera.md):
-    a case is an existing `PrivateRecord`, so this needs no new table. EST-01 fills its title from the first message."""
+    a case is an existing `PrivateRecord`, so this needs no new table. The title is a placeholder until a real
+    turn (EST-04) can name it from what the person actually said."""
+    now = datetime.now(timezone.utc)
     count = db.scalar(select(func.count()).select_from(PrivateRecord).where(PrivateRecord.owner_id == user.id))
     record = add_record(db, user, RecordInput(title=f"Conversación #{count + 1:03d}",
                                               description="Conversación iniciada desde el chat."))
+    # Started empty so the person can add facts (manual events, later tool calls) without an "analyze" step first.
+    db.add(Timeline(record_id=record.id, revision=0, confirmed_revision=None, mode="empty",
+                    events=[], warnings=[], review_items=[], processed_at=now))
     db.commit()
     return {"case_id": record.id}
+
+
+def chat_message(row: ConversationMessage) -> ChatMessage:
+    return ChatMessage(id=row.id, role=row.role, text=row.text, created_at=row.created_at,
+                       client_message_id=row.client_message_id, intent=None,
+                       attachment_ids=row.attachment_ids, event_ids=row.event_ids)
+
+
+def recent_messages(db: Session, record_id: UUID) -> list[ChatMessage]:
+    """Last `MAX_HISTORY` messages, oldest first (chat reading order)."""
+    rows = db.scalars(select(ConversationMessage).where(ConversationMessage.record_id == str(record_id))
+                      .order_by(ConversationMessage.created_at.desc(), ConversationMessage.id.desc())
+                      .limit(MAX_HISTORY)).all()
+    return [chat_message(row) for row in reversed(rows)]
 
 
 @router.get("/api/records/{record_id}/conversation", response_model=ConversationView)
 def read_conversation(record_id: UUID, user: User = Depends(current_user), db: Session = Depends(get_db)):
     owned_record(db, record_id, user)
+    # `case_state` is still EST-00's frozen example: deriving it for real (goal/people from `conversation_states`,
+    # events from `Timeline` via `agent/events.py`, evidence from `RecordFile`) is `agent/state.py::build_case_state`,
+    # explicitly scoped to EST-03/EST-04 (see odd/tasks/conversational-vera.md). Returning real message history here
+    # while keeping that placeholder is intentional and documented, not silently stubbed.
     view = load_example("conversation.json", ConversationView)
-    return view.model_copy(update={"case_id": str(record_id), "case_state": for_case(view.case_state, str(record_id))})
+    return view.model_copy(update={"case_id": str(record_id), "messages": recent_messages(db, record_id),
+                                   "case_state": for_case(view.case_state, str(record_id))})
 
 
 @router.post("/api/records/{record_id}/conversation/messages", response_model=ChatTurnResponse)

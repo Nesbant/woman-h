@@ -135,6 +135,33 @@ class Timeline(Base):
     processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class ConversationMessage(Base):
+    """One turn's worth of chat text (epic #5). Persisted from the first message (decision D1);
+    deleted with the situation. `intent` is not stored: it is only ever a transient read of a turn."""
+    __tablename__ = "conversation_messages"
+    __table_args__ = (CheckConstraint("role IN ('user', 'assistant')", name="valid_conversation_role"),
+                      UniqueConstraint("record_id", "client_message_id", name="uq_conversation_messages_client_id"))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    record_id: Mapped[str] = mapped_column(ForeignKey("private_records.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(20))
+    text: Mapped[str] = mapped_column(Text)
+    client_message_id: Mapped[str | None] = mapped_column(String(64))
+    attachment_ids: Mapped[list] = mapped_column(JSON, default=list)
+    event_ids: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ConversationState(Base):
+    """Agent-derived bits of `CaseState` that are not already stored elsewhere (goal, people, gaps).
+    Events, counts and evidence are derived from `Timeline`/`RecordFile` instead of duplicated here."""
+    __tablename__ = "conversation_states"
+    record_id: Mapped[str] = mapped_column(ForeignKey("private_records.id", ondelete="CASCADE"), primary_key=True)
+    goal: Mapped[str] = mapped_column(String(30))
+    people: Mapped[list] = mapped_column(JSON, default=list)
+    missing_information: Mapped[list] = mapped_column(JSON, default=list)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class ComplaintDraft(Base):
     """Private complaint draft. Built only from reviewed information; never visible to institutions."""
     __tablename__ = "complaint_drafts"

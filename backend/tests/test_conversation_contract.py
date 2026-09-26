@@ -44,7 +44,9 @@ def test_conversation_view_matches_the_contract_and_is_scoped_to_its_owner(clien
     response = client.get(f"/api/records/{case_id}/conversation")
     assert response.status_code == 200
     view = ConversationView.model_validate(response.json())
-    assert view.case_id == case_id and view.case_state.case_id == case_id and view.messages
+    # EST-01: message history is now real, so a conversation that was just started truly has none yet.
+    # `case_state` stays EST-00's frozen example until EST-03 builds a real derivation (see conversation.py).
+    assert view.case_id == case_id and view.case_state.case_id == case_id and view.messages == []
 
     login(client, "bea@example.test")
     assert client.get(f"/api/records/{case_id}/conversation").status_code == 404

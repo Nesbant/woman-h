@@ -26,7 +26,7 @@ Runners: `backend/.venv/bin/python -m pytest -q` (SQLite; PG via `TEST_DATABASE_
 
 ## Tasks
 - [x] EST-00 (#6) Contract: Pydantic models, 5 JSON examples, 4 stub endpoints behind session, `api/chat.ts`, types, contract test
-- [ ] EST-01 (#7) Persistence: `conversation_messages`, `conversation_states`, migration 0009, real start/get, PRIVATE_TABLES
+- [x] EST-01 (#7) Persistence: `conversation_messages`, `conversation_states`, migration 0009, real start/get, PRIVATE_TABLES
 - [ ] EST-02 (#8) Typed event ⇄ timeline dict, origin, `message` source, `merge_proposals` keeps conversation events
 - [ ] EST-03 (#9) Validated tool executor (6 tools, strict schemas) + `state.build_case_state`
 - [ ] EST-04 (#10) Turn orchestrator + ScriptedBrain, real messages/state endpoints, idempotency, 409
@@ -42,5 +42,14 @@ Runners: `backend/.venv/bin/python -m pytest -q` (SQLite; PG via `TEST_DATABASE_
 - EST-00 done: contract (`agent/contracts.py`), 5 examples, stub router (POST /api/conversations already creates a real
   PrivateRecord), `api/chat.ts`, `resolveJsonModule`. pytest 141 passed / 1 skipped; tsc ok; vitest 21 passed.
 
+- EST-01 done: `conversation_messages`/`conversation_states` tables + migration 0009; `POST /api/conversations` now
+  also creates an empty `Timeline`; `GET .../conversation` returns real, capped-at-50 message history from the DB
+  (`case_state` stays EST-00's frozen example — real derivation is `agent/state.py::build_case_state`, explicitly
+  EST-03/EST-04 — documented in `conversation.py`). Both new tables added to `PRIVATE_TABLES` and conftest cleanup.
+  `pytest tests/test_conversation.py tests/test_conversation_contract.py`: 14 passed. Full suite SQLite: 146 passed /
+  1 skipped. Full suite PostgreSQL (`vera_test`, a disposable DB created for this): 147 passed / 0 skipped. `alembic
+  check` clean on both SQLite and PostgreSQL. One frozen-example assertion in `test_conversation_contract.py` updated
+  (`view.messages` is now `[]` for a freshly started conversation instead of the fixture's non-empty history).
+
 ## Next step
-EST-01 on `feat/conversation-core-esteban` (stacked on the contract branch until PR merges).
+EST-02 on `feat/conversation-core-esteban` (stacked on the contract branch until PR merges).
