@@ -145,6 +145,61 @@ def test_happy_path_reaches_mode_ai_through_the_est04_flow_with_a_stable_request
         assert result_payload["is_error"] is False
 
 
+# --- fact-detection slice 1: several `create_or_update_candidate_event` calls in one turn, one per round -----
+
+def test_two_facts_in_one_message_via_two_tool_rounds_then_confirm_the_right_one(client, monkeypatch, openrouter_settings):
+    case_id = start_case(client)
+    text = ("En la reunión hizo un comentario sobre mi cuerpo y ayer me escribió a las 11 preguntándome si "
+           "estaba despierta.")
+    reunion_quote = "En la reunión hizo un comentario sobre mi cuerpo"
+    mensaje_quote = "ayer me escribió a las 11 preguntándome si estaba despierta."
+    create_reunion = {"event_id": None, "title": "Comentario en la reunión", "description": reunion_quote,
+                      "date_kind": "unknown", "event_date": None, "approximate_date": None, "event_time": None,
+                      "origin": "user_statement", "user_quote": reunion_quote}
+    create_mensaje = {"event_id": None, "title": "Mensaje de ayer", "description": mensaje_quote,
+                      "date_kind": "unknown", "event_date": None, "approximate_date": None, "event_time": None,
+                      "origin": "user_statement", "user_quote": mensaje_quote}
+    fake = install_fake_transport(monkeypatch, [
+        _tool_call_response("create_or_update_candidate_event", create_reunion, call_id="call-1"),
+        _tool_call_response("create_or_update_candidate_event", create_mensaje, call_id="call-2"),
+        _final_response("Entendí dos momentos distintos: el de la reunión y el del mensaje de ayer. Los dejé "
+                        "pendientes para que los revises."),
+    ])
+
+    narrated = send(client, case_id, text)
+    assert narrated.status_code == 200
+    body = narrated.json()
+    assert body["mode"] == "ai"
+    events = body["case_state"]["events"]
+    assert len(events) == 2
+    assert all(event["status"] == "candidate" for event in events)
+    message_event = next(e for e in events if e["source"]["quote"] == mensaje_quote)
+    other_event = next(e for e in events if e["id"] != message_event["id"])
+    assert set(body["touched_event_ids"]) == {message_event["id"], other_event["id"]}
+
+    fake.responses.extend([
+        _tool_call_response("confirm_event", {"event_id": message_event["id"], "user_quote": "guarda el del mensaje"}),
+        _final_response("Quedó confirmado ese hecho, gracias por contármelo."),
+    ])
+    confirmed = send(client, case_id, "Sí, guarda el del mensaje.")
+    assert confirmed.status_code == 200
+    confirmed_body = confirmed.json()
+    assert confirmed_body["mode"] == "ai"
+    updated_message = next(e for e in confirmed_body["case_state"]["events"] if e["id"] == message_event["id"])
+    updated_other = next(e for e in confirmed_body["case_state"]["events"] if e["id"] == other_event["id"])
+    assert updated_message["status"] == "confirmed"
+    assert updated_other["status"] == "candidate"  # untouched
+
+    timeline = client.get(f"/api/records/{case_id}/timeline").json()
+    persisted = next(e for e in timeline["events"] if e["id"] == message_event["id"])
+    assert persisted["status"] == "accepted" and persisted["reviewed"] is True
+    other_persisted = next(e for e in timeline["events"] if e["id"] == other_event["id"])
+    assert other_persisted["status"] == "proposed"
+
+    # 3 rounds x 1st turn (2 creates + 1 final) + 2 rounds x 2nd turn (1 confirm + 1 final) = 5 calls.
+    assert len(fake.bodies()) == 5
+
+
 def test_missing_api_key_falls_back_to_scripted_with_no_5xx(client, monkeypatch):
     from app.config import settings as real_settings
     fake = real_settings().model_copy(update={"chat_brain": "openrouter", "openrouter_api_key": None})

@@ -125,7 +125,7 @@ CREATE_OR_UPDATE_SCHEMA = {
                           "description": "HH:MM; se conserva solo si aparece escrita tal cual en user_quote."},
             "origin": {"type": "string", "enum": list(ORIGINS),
                       "description": "'user_statement' si la persona lo dijo directamente; 'model_inference' "
-                                    "si es un patrón que notaste vos, no algo que ella haya afirmado."},
+                                    "si es un patrón que notaste tú, no algo que ella haya afirmado."},
             "user_quote": {"type": "string", "maxLength": 2000,
                           "description": "Cita literal del último mensaje de la persona que respalda este hecho."},
         },
@@ -177,7 +177,7 @@ CONFIRM_EVENT_SCHEMA = {
     "name": "confirm_event",
     "description": ("Confirma un hecho candidato porque la persona pidió explícitamente guardarlo. Exige la "
                     "frase literal de su último mensaje donde lo pidió; nunca se confirma sin ese pedido "
-                    "explícito, ni siquiera un hecho que vos misma propusiste (model_inference)."),
+                    "explícito, ni siquiera un hecho que tú misma propusiste (model_inference)."),
     "input_schema": {
         "type": "object",
         "properties": {
