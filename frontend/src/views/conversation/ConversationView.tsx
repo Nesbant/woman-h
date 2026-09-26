@@ -12,6 +12,7 @@ import { Composer } from './Composer'
 import type { ComposerAttachment } from './AttachmentChips'
 import { UnderstandingPanel } from './UnderstandingPanel'
 import { SuggestedActions } from './SuggestedActions'
+import { MessageList } from './MessageList'
 
 type Pending = { id: string; text: string; attachmentIds: string[]; status: 'sending' | 'failed' }
 
@@ -25,7 +26,7 @@ export function ConversationView({ recordId }: { recordId?: string }) {
   const { overview, refresh } = useRecordContext()
   const fail = useFailure()
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [draft, setDraft] = useState('')
+  const [composerKey, setComposerKey] = useState(0)
   const [loading, setLoading] = useState(!!recordId)
   const [loadError, setLoadError] = useState('')
   const [sendError, setSendError] = useState('')
@@ -62,7 +63,7 @@ export function ConversationView({ recordId }: { recordId?: string }) {
     creating.current = null
     inFlight.current = null
     reviewing.current = null
-    setDraft('')
+    setComposerKey(key => key + 1)
     setMessages([])
     setAttachments([])
     setCaseState(null)
@@ -80,19 +81,21 @@ export function ConversationView({ recordId }: { recordId?: string }) {
 
   useEffect(() => { end.current?.scrollIntoView?.({ block: 'end' }) }, [messages, pending, loading])
 
+  // Derived once so the effect's dependency doesn't change when overview loads after recordId is already known
+  // (that used to re-run the effect and fire a second, redundant GET /timeline for the same id).
+  const timelineId = recordId ?? overview?.record.id
   useEffect(() => {
     if (import.meta.env.VITE_CHAT_MOCK === '1') { setConfiguredMode('fixture'); return }
-    const id = recordId ?? overview?.record.id
-    if (!id) { setConfiguredMode(null); return }
+    if (!timelineId) { setConfiguredMode(null); return }
     let active = true
     setConfiguredMode(null)
-    Promise.resolve().then(() => getTimeline(id)).then(timeline => {
+    Promise.resolve().then(() => getTimeline(timelineId)).then(timeline => {
       if (active) setConfiguredMode(timeline.configured_mode)
     }).catch(() => { if (active) setConfiguredMode(null) })
     return () => { active = false }
-  }, [recordId, overview?.record.id])
+  }, [timelineId])
 
-  async function reloadCaseState(id: string, current = generation.current) {
+  const reloadCaseState = useCallback(async (id: string, current = generation.current) => {
     try {
       const state = await getCaseState(id)
       if (generation.current === current) { setCaseState(state); setReviewError('') }
@@ -101,9 +104,9 @@ export function ConversationView({ recordId }: { recordId?: string }) {
       if (generation.current === current) fail(error, setReviewError)
       return false
     }
-  }
+  }, [fail])
 
-  async function reviewCandidate(event: CaseEvent, status: 'accepted' | 'discarded', content?: Partial<EventInput>) {
+  const reviewCandidate = useCallback(async (event: CaseEvent, status: 'accepted' | 'discarded', content?: Partial<EventInput>) => {
     if (!recordId || reviewing.current) return false
     reviewing.current = event.id
     const current = generation.current
@@ -126,7 +129,12 @@ export function ConversationView({ recordId }: { recordId?: string }) {
     } finally {
       if (reviewing.current === event.id) { reviewing.current = null; setReviewBusyId(null) }
     }
-  }
+  }, [recordId, fail, refresh, reloadCaseState])
+
+  const onConfirmSuggested = useCallback((event: CaseEvent) => { void reviewCandidate(event, 'accepted') }, [reviewCandidate])
+  const onKeepTalking = useCallback(() => { document.getElementById('chat-text')?.focus() }, [])
+  const onRetryCaseState = useCallback(() => { if (recordId) void reloadCaseState(recordId) }, [recordId, reloadCaseState])
+  const onOpenTimeline = useCallback(() => { if (recordId) navigate(recordPath(recordId, 'entender')) }, [recordId])
 
   async function ensureRecord() {
     if (recordId) return recordId
@@ -207,8 +215,8 @@ export function ConversationView({ recordId }: { recordId?: string }) {
     } finally { if (inFlight.current === message.id) inFlight.current = null }
   }
 
-  function submit() {
-    const text = draft.trim()
+  function submit(rawText: string) {
+    const text = rawText.trim()
     if (!text || inFlight.current || pending || loading || loadError || attachments.some(file => file.status !== 'ready')) return
     const attachmentIds = attachments.map(file => file.id!).filter(Boolean)
     const id = crypto.randomUUID()
@@ -217,7 +225,6 @@ export function ConversationView({ recordId }: { recordId?: string }) {
       intent: null, attachment_ids: attachmentIds, event_ids: [],
     }
     setMessages(items => [...items, optimistic])
-    setDraft('')
     void deliver({ id, text, attachmentIds, status: 'sending' })
   }
 
@@ -234,28 +241,17 @@ export function ConversationView({ recordId }: { recordId?: string }) {
       </div>
       {loading && <p role="status" className="loading">Cargando conversación…</p>}
       {loadError && <div role="alert" className="error">{loadError} <button className="btn btn-secondary btn-sm" onClick={() => { if (recordId) loadConversation(recordId, generation.current) }}>Reintentar</button></div>}
-      <div className="conversation-log" role="log" aria-label="Mensajes de la conversación" aria-live="polite" aria-relevant="additions text">
-        {!loading && !loadError && messages.length === 0 && <div className="conversation-empty">
-          <h2>¿Qué pasó? Puedes empezar por donde quieras.</h2>
-          <p>Lo que cuentes queda en tu espacio privado. Tú decides si quieres compartir algo más adelante.</p>
-        </div>}
-        {messages.map(message => <article className={`chat-message ${message.role}`} key={message.id}>
-          <strong>{message.role === 'user' ? 'Tú' : 'VERA'}</strong>
-          <p>{message.text}</p>
-          {message.attachment_ids.length > 0 && <span className="small">{message.attachment_ids.length} {message.attachment_ids.length === 1 ? 'archivo adjunto' : 'archivos adjuntos'}</span>}
-          {pending?.id === message.client_message_id && <span className="small">{pending.status === 'sending' ? 'Enviando…' : 'No se envió'}</span>}
-        </article>)}
-        <div ref={end} />
-      </div>
+      <MessageList messages={messages} showEmpty={!loading && !loadError && messages.length === 0}
+        pendingId={pending?.id} pendingStatus={pending?.status} endRef={end} />
       <SuggestedActions actions={lastActions} recordId={recordId} state={caseState} busy={!!reviewBusyId}
-        onConfirm={event => void reviewCandidate(event, 'accepted')} onKeepTalking={() => document.getElementById('chat-text')?.focus()} />
+        onConfirm={onConfirmSuggested} onKeepTalking={onKeepTalking} />
       {sendError && <div role="alert" className="error">{sendError} <button className="btn btn-secondary btn-sm" onClick={() => { if (pending?.status === 'failed') void deliver(pending) }}>Reintentar</button></div>}
-      <Composer text={draft} onTextChange={setDraft} onSend={submit} onUpload={upload} onRemove={file => void removeAttachment(file)}
+      <Composer key={composerKey} onSend={submit} onUpload={upload} onRemove={file => void removeAttachment(file)}
         files={attachments} disabled={loading || !!loadError} sending={!!pending} />
     </section>
       <UnderstandingPanel state={caseState} changedIds={changedIds} busyId={reviewBusyId} error={reviewError} notice={reviewNotice}
-        onReview={reviewCandidate} onRetry={() => { if (recordId) void reloadCaseState(recordId) }}
-        onOpenTimeline={() => { if (recordId) navigate(recordPath(recordId, 'entender')) }} />
+        onReview={reviewCandidate} onRetry={onRetryCaseState}
+        onOpenTimeline={onOpenTimeline} />
     </div>
   </>
 }

@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import type { CaseEvent, CaseState, SuggestedAction } from '../../types'
 import { navigate, recordPath } from '../../router'
 import { stageSharePreselection } from '../share/useShareSelection'
 
-export function SuggestedActions({ actions, recordId, state, busy, onConfirm, onKeepTalking }: {
+function SuggestedActionsImpl({ actions, recordId, state, busy, onConfirm, onKeepTalking }: {
   actions: SuggestedAction[]; recordId?: string; state: CaseState | null; busy: boolean
   onConfirm: (event: CaseEvent) => void; onKeepTalking?: () => void
 }) {
@@ -30,3 +30,5 @@ export function SuggestedActions({ actions, recordId, state, busy, onConfirm, on
     {error && <p role="alert" className="error">{error}</p>}
   </div>
 }
+
+export const SuggestedActions = memo(SuggestedActionsImpl)

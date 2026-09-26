@@ -1,11 +1,11 @@
-import { useId, useState } from 'react'
+import { memo, useId, useState } from 'react'
 import type { CaseState } from '../../types'
 import { EventCandidateCard } from './EventCandidateCard'
 import type { CandidateAction } from './EventCandidateCard'
 
 type ExtendedCounts = CaseState['counts'] & { facts?: number; evidence?: number; approximate_dates?: number }
 
-export function UnderstandingPanel({ state, changedIds, busyId, error, notice, onReview, onRetry, onOpenTimeline }: {
+function UnderstandingPanelImpl({ state, changedIds, busyId, error, notice, onReview, onRetry, onOpenTimeline }: {
   state: CaseState | null; changedIds: string[]; busyId: string | null; error: string; notice: string
   onReview: CandidateAction; onRetry: () => void; onOpenTimeline: () => void
 }) {
@@ -38,3 +38,5 @@ export function UnderstandingPanel({ state, changedIds, busyId, error, notice, o
     </div>
   </aside>
 }
+
+export const UnderstandingPanel = memo(UnderstandingPanelImpl)

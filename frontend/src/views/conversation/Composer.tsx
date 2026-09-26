@@ -4,9 +4,7 @@ import { AttachmentChips } from './AttachmentChips'
 import type { ComposerAttachment } from './AttachmentChips'
 
 type Props = {
-  text: string
-  onTextChange: (text: string) => void
-  onSend: () => void
+  onSend: (text: string) => void
   onUpload: (file: File, description: string) => Promise<void>
   onRemove: (file: ComposerAttachment) => void
   files: ComposerAttachment[]
@@ -14,7 +12,9 @@ type Props = {
   sending: boolean
 }
 
-export function Composer({ text, onTextChange, onSend, onUpload, onRemove, files, disabled, sending }: Props) {
+/** The composer owns its own draft text: typing here must never re-render the rest of the conversation screen. */
+export function Composer({ onSend, onUpload, onRemove, files, disabled, sending }: Props) {
+  const [text, setText] = useState('')
   const [selected, setSelected] = useState<File | null>(null)
   const [description, setDescription] = useState('')
   const picker = useRef<HTMLInputElement>(null)
@@ -27,10 +27,17 @@ export function Composer({ text, onTextChange, onSend, onUpload, onRemove, files
     area.current.style.height = `${Math.max(44, Math.min(area.current.scrollHeight, 240))}px`
   }, [text])
 
+  function deliver() {
+    if (!canSend) return
+    const value = text.trim()
+    setText('')
+    onSend(value)
+  }
+
   function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault()
-      if (canSend) onSend()
+      deliver()
     }
   }
 
@@ -43,9 +50,9 @@ export function Composer({ text, onTextChange, onSend, onUpload, onRemove, files
     await onUpload(file, detail)
   }
 
-  return <form className="conversation-composer" onSubmit={event => { event.preventDefault(); if (canSend) onSend() }}>
+  return <form className="conversation-composer" onSubmit={event => { event.preventDefault(); deliver() }}>
     <label htmlFor="chat-text">Tu mensaje</label>
-    <textarea ref={area} id="chat-text" className="textarea" rows={1} value={text} onChange={event => onTextChange(event.target.value)}
+    <textarea ref={area} id="chat-text" className="textarea" rows={1} value={text} onChange={event => setText(event.target.value)}
       onKeyDown={keyDown} disabled={disabled} aria-describedby="chat-keyboard-help" />
     <span id="chat-keyboard-help" className="small">Enter para enviar · Shift+Enter para una nueva línea.</span>
     <AttachmentChips files={files} onRemove={onRemove} />
